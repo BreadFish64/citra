@@ -150,7 +150,6 @@
   xlink:show="new">
     </description>
    </property>
-   
   </action>
   <action name="action_Single_Window_Mode">
    <property name="checkable">
