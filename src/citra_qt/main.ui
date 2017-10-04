@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<ui xmlns:xlink="http://www.w3.org/1999/xlink">
 <ui version="4.0">
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
@@ -143,8 +144,13 @@
   </action>
   <action name="action_About">
    <property name="text">
-    <string>About Citra</string>
+    <description
+  xlink:type="simple"
+  xlink:href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  xlink:show="new">
+    </description>
    </property>
+   
   </action>
   <action name="action_Single_Window_Mode">
    <property name="checkable">
