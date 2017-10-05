@@ -58,8 +58,8 @@ build_script:
         }
 
 after_build:
-  - cmd: signtool sign /f cert-key-20171004-183620.p12 C:\bin\Release\citra-qt.exe
-  - cmd: signtool sign /f cert-key-20171004-183620.p12 C:\bin\Release\citra.exe
+  - cmd: signtool sign /f cert-key-20171004-183620.p12 .\msvc_build\bin\release\citra-qt.exe
+  - cmd: signtool sign /f cert-key-20171004-183620.p12 .\msvc_build\bin\release\citra.exe
   - ps: |
         $GITDATE = $(git show -s --date=short --format='%ad') -replace "-",""
         $GITREV = $(git show -s --format='%h')
