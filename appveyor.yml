@@ -89,8 +89,8 @@ after_build:
           Copy-Item .\license.txt -Destination $RELEASE_DIST
           Copy-Item .\README.md -Destination $RELEASE_DIST
           # sign the binaries
-          ./ signtool sign /f cert-key-20171004-183620.p12 .\msvc_build\bin\release\citra.exe
-          ./ signtool sign /f cert-key-20171004-183620.p12 .\msvc_build\bin\release\citra-qt.exe
+          ./signtool sign /f cert-key-20171004-183620.p12 .\msvc_build\bin\release\citra.exe
+          ./signtool sign /f cert-key-20171004-183620.p12 .\msvc_build\bin\release\citra-qt.exe
           7z a -tzip $MSVC_BUILD_ZIP $RELEASE_DIST\*
           7z a $MSVC_SEVENZIP $RELEASE_DIST
         } else {
