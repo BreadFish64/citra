@@ -42,7 +42,7 @@ before_build:
   - ps: |
         if ($env:BUILD_TYPE -eq 'msvc') {
           # redirect stderr and change the exit code to prevent powershell from cancelling the build if cmake prints a warning
-          cmd /C 'cmake -G "Visual Studio 15 2017 Win64" -DCITRA_USE_BUNDLED_QT=1 -DCITRA_USE_BUNDLED_SDL2=1 -DCMAKE_USE_OPENSSL=0 .. 2>&1 && exit 0'
+          cmd /C 'cmake -G "Visual Studio 15 2017 Win64" -DCITRA_USE_BUNDLED_QT=1 -DCITRA_USE_BUNDLED_SDL2=1 -DCMAKE_USE_OPENSSL=0  DENABLE_WEB_SERVICE=0 .. 2>&1 && exit 0'
         } else {
           C:\msys64\usr\bin\bash.exe -lc "cmake -G 'MSYS Makefiles' -DUSE_SYSTEM_CURL=1 -DCITRA_USE_BUNDLED_CURL=1 -DCMAKE_BUILD_TYPE=Release .. 2>&1"
         }
@@ -89,8 +89,8 @@ after_build:
           Copy-Item .\license.txt -Destination $RELEASE_DIST
           Copy-Item .\README.md -Destination $RELEASE_DIST
           # sign the binaries
-          signtool sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra.exe
-          signtool sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra-qt.exe
+          C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra.exe
+          C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra-qt.exe
           7z a -tzip $MSVC_BUILD_ZIP $RELEASE_DIST\*
           7z a $MSVC_SEVENZIP $RELEASE_DIST
         } else {
@@ -140,8 +140,8 @@ after_build:
 
           # copy the qt windows plugin dll to platforms
           Copy-Item -path "C:/msys64/mingw64/share/qt5/plugins/platforms/qwindows.dll" -force -destination "$RELEASE_DIST/platforms"
-          signtool sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra.exe
-          signtool sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra-qt.exe
+          C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra.exe
+          C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe sign /f cert-key-20171004-183620.p12 $RELEASE_DIST\citra-qt.exe
           7z a -tzip $MINGW_BUILD_ZIP $RELEASE_DIST\*
           7z a $MINGW_SEVENZIP $RELEASE_DIST
         }
