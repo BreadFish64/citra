@@ -140,8 +140,8 @@ after_build:
 
           # copy the qt windows plugin dll to platforms
           Copy-Item -path "C:/msys64/mingw64/share/qt5/plugins/platforms/qwindows.dll" -force -destination "$RELEASE_DIST/platforms"
-          & "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe" sign /f ./dist/cert.p12 p/ $env:certpass $RELEASE_DIST\citra.exe
-          & "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe" sign /f ./dist/cert.p12 p/ $env:certpass $RELEASE_DIST\citra-qt.exe
+          & "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe" sign /f ./dist/cert.p12 /p $env:certpass $RELEASE_DIST\citra.exe
+          & "C:\Program Files (x86)\Microsoft SDKs\Windows\v7.1A\Bin\signtool.exe" sign /f ./dist/cert.p12 /p $env:certpass $RELEASE_DIST\citra-qt.exe
           7z a -tzip $MINGW_BUILD_ZIP $RELEASE_DIST\*
           7z a $MINGW_SEVENZIP $RELEASE_DIST
         }
