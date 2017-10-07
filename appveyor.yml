@@ -14,9 +14,11 @@ environment:
   CHERE_INVOKING: 1
   matrix:
     - BUILD_TYPE: mingw
-    - BUILD_TYPE: msvc  
+    - BUILD_TYPE: msvc
+  # Encrypted signing certificate password
   certpass:
     secure: 3JHoW2rsNnytyaddRusucw==
+    
 platform:
   - x64
 
