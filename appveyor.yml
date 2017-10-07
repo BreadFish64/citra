@@ -18,7 +18,7 @@ environment:
   # Encrypted signing certificate password
   certpass:
     secure: 3JHoW2rsNnytyaddRusucw==
-    
+
 platform:
   - x64
 
