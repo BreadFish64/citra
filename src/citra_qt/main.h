@@ -25,6 +25,7 @@ class MicroProfileDialog;
 class ProfilerWidget;
 class RegistersWidget;
 class WaitTreeWidget;
+class AboutDialog;
 
 class GMainWindow : public QMainWindow {
     Q_OBJECT
@@ -126,7 +127,9 @@ private slots:
     void OnSwapScreens();
     void OnConfigure();
     void OnToggleFilterBar();
+    void ShowAboutDialog();
     void OnDisplayTitleBars(bool);
+    void ToggleFullscreen();
     void ToggleWindowMode();
     void OnCreateGraphicsSurfaceViewer();
     void OnCoreError(Core::System::ResultStatus, std::string);

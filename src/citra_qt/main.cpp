@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QtGui>
 #include <QtWidgets>
+#include "citra_qt/aboutdialog.h"
 #include "citra_qt/bootmanager.h"
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_dialog.h"
@@ -244,6 +245,9 @@ void GMainWindow::InitializeHotkeys() {
     RegisterHotkey("Main Window", "Load File", QKeySequence::Open);
     RegisterHotkey("Main Window", "Swap Screens", QKeySequence::NextChild);
     RegisterHotkey("Main Window", "Start Emulation");
+    RegisterHotkey("Main Window", "Fullscreen", QKeySequence::FullScreen);
+    RegisterHotkey("Main Window", "Exit Fullscreen", QKeySequence(Qt::Key_Escape),
+                   Qt::ApplicationShortcut);
     LoadHotkeys();
 
     connect(GetHotkey("Main Window", "Load File", this), SIGNAL(activated()), this,
@@ -252,6 +256,16 @@ void GMainWindow::InitializeHotkeys() {
             SLOT(OnStartGame()));
     connect(GetHotkey("Main Window", "Swap Screens", render_window), SIGNAL(activated()), this,
             SLOT(OnSwapScreens()));
+    connect(GetHotkey("Main Window", "Fullscreen", render_window), &QShortcut::activated,
+            ui.action_Fullscreen, &QAction::trigger);
+    connect(GetHotkey("Main Window", "Fullscreen", render_window), &QShortcut::activatedAmbiguously,
+            ui.action_Fullscreen, &QAction::trigger);
+    connect(GetHotkey("Main Window", "Exit Fullscreen", this), &QShortcut::activated, this, [&] {
+        if (emulation_running) {
+            ui.action_Fullscreen->setChecked(false);
+            ToggleFullscreen();
+        }
+    });
 }
 
 void GMainWindow::SetDefaultUIGeometry() {
@@ -279,6 +293,8 @@ void GMainWindow::RestoreUIState() {
 
     ui.action_Single_Window_Mode->setChecked(UISettings::values.single_window_mode);
     ToggleWindowMode();
+
+    ui.action_Fullscreen->setChecked(UISettings::values.fullscreen);
 
     ui.action_Display_Dock_Widget_Headers->setChecked(UISettings::values.display_titlebar);
     OnDisplayTitleBars(ui.action_Display_Dock_Widget_Headers->isChecked());
@@ -323,6 +339,18 @@ void GMainWindow::ConnectMenuEvents() {
     ui.action_Show_Filter_Bar->setShortcut(tr("CTRL+F"));
     connect(ui.action_Show_Filter_Bar, &QAction::triggered, this, &GMainWindow::OnToggleFilterBar);
     connect(ui.action_Show_Status_Bar, &QAction::triggered, statusBar(), &QStatusBar::setVisible);
+    ui.action_Fullscreen->setShortcut(GetHotkey("Main Window", "Fullscreen", this)->key());
+    connect(ui.action_Fullscreen, &QAction::triggered, this, &GMainWindow::ToggleFullscreen);
+
+    // Help
+    connect(ui.action_FAQ, &QAction::triggered,
+            []() { QDesktopServices::openUrl(QUrl("https://citra-emu.org/wiki/faq/")); });
+    connect(ui.action_About, &QAction::triggered, this, &GMainWindow::ShowAboutDialog);
+}
+
+void GMainWindow::ShowAboutDialog() {
+    AboutDialog about{this};
+    about.exec();
 }
 
 void GMainWindow::OnDisplayTitleBars(bool show) {
@@ -460,6 +488,7 @@ void GMainWindow::BootGame(const QString& filename) {
     render_window->setFocus();
 
     emulation_running = true;
+    ToggleFullscreen();
     OnStartGame();
 }
 
@@ -624,6 +653,29 @@ void GMainWindow::OnStopGame() {
     ShutdownGame();
 }
 
+void GMainWindow::ToggleFullscreen() {
+    if (!emulation_running) {
+        return;
+    }
+    if (ui.action_Fullscreen->isChecked()) {
+        if (ui.action_Single_Window_Mode->isChecked()) {
+            ui.menubar->hide();
+            statusBar()->hide();
+            showFullScreen();
+        } else {
+            render_window->showFullScreen();
+        }
+    } else {
+        if (ui.action_Single_Window_Mode->isChecked()) {
+            statusBar()->setVisible(ui.action_Show_Status_Bar->isChecked());
+            ui.menubar->show();
+            showNormal();
+        } else {
+            render_window->showNormal();
+        }
+    }
+}
+
 void GMainWindow::ToggleWindowMode() {
     if (ui.action_Single_Window_Mode->isChecked()) {
         // Render in the main window...
@@ -784,6 +836,7 @@ void GMainWindow::closeEvent(QCloseEvent* event) {
     UISettings::values.microprofile_visible = microProfileDialog->isVisible();
 #endif
     UISettings::values.single_window_mode = ui.action_Single_Window_Mode->isChecked();
+    UISettings::values.fullscreen = ui.action_Fullscreen->isChecked();
     UISettings::values.display_titlebar = ui.action_Display_Dock_Widget_Headers->isChecked();
     UISettings::values.show_filter_bar = ui.action_Show_Filter_Bar->isChecked();
     UISettings::values.show_status_bar = ui.action_Show_Status_Bar->isChecked();
