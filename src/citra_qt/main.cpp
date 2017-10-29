@@ -40,6 +40,7 @@
 #include "common/string_util.h"
 #include "core/core.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
+#include "core/file_sys/cia_container.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/loader/loader.h"
 #include "core/settings.h"
@@ -320,6 +321,7 @@ void GMainWindow::ConnectWidgetEvents() {
 void GMainWindow::ConnectMenuEvents() {
     // File
     connect(ui.action_Load_File, &QAction::triggered, this, &GMainWindow::OnMenuLoadFile);
+    connect(ui.action_Install_CIA, &QAction::triggered, this, &GMainWindow::OnMenuInstallCIA);
     connect(ui.action_Select_Game_List_Root, &QAction::triggered, this,
             &GMainWindow::OnMenuSelectGameListRoot);
     connect(ui.action_Exit, &QAction::triggered, this, &QMainWindow::close);
@@ -438,6 +440,14 @@ bool GMainWindow::LoadROM(const QString& filename) {
         }
         return false;
     }
+    return true;
+}
+
+bool GMainWindow::LoadCIA(const QString& filepath) {
+    LOG_INFO(Frontend, "test qt");
+    FileSys::CIAContainer& CIAContainer{Loader::ResultStatus.Load(filepath.toStdString())};
+
+    const FileSys::CIAContainer result{ResultStatus.Load(filepath.toStdString())};
     return true;
 }
 
@@ -587,6 +597,23 @@ void GMainWindow::OnMenuLoadFile() {
         UISettings::values.roms_path = QFileInfo(filename).path();
 
         BootGame(filename);
+    }
+}
+
+void GMainWindow::OnMenuInstallCIA() {
+    QString extensions;
+    for (const auto& piece : game_list->supported_file_extensions)
+        extensions += "*." + piece + " ";
+
+    QString file_filter = tr("3DS Executable") + " (" + extensions + ")";
+    file_filter += ";;" + tr("All Files (*.*)");
+
+    QString filepath = QFileDialog::getOpenFileName(this, tr("Load File"),
+                                                    UISettings::values.roms_path, file_filter);
+    if (!filepath.isEmpty()) {
+        UISettings::values.roms_path = QFileInfo(filepath).path();
+
+        LoadCIA(filepath);
     }
 }
 

@@ -12,6 +12,7 @@
 #include "ui_main.h"
 
 class Config;
+class CIAContainer;
 class EmuThread;
 class GameList;
 class GImageInfo;
@@ -77,6 +78,7 @@ private:
     void ConnectMenuEvents();
 
     bool LoadROM(const QString& filename);
+    bool LoadCIA(const QString& filepath);
     void BootGame(const QString& filename);
     void ShutdownGame();
 
@@ -120,6 +122,7 @@ private slots:
     void OnGameListLoadFile(QString game_path);
     void OnGameListOpenSaveFolder(u64 program_id);
     void OnMenuLoadFile();
+    void OnMenuInstallCIA();
     /// Called whenever a user selects the "File->Select Game List Root" menu item
     void OnMenuSelectGameListRoot();
     void OnMenuRecentFile();
