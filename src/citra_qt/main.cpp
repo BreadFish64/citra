@@ -450,7 +450,7 @@ bool GMainWindow::LoadCIA(const QString& filepath) {
         // this CIA is valid, maybe grab a TID, icon, etc
         LOG_INFO(Frontend, "success");
     }
-    return true;
+    return false;
 }
 
 void GMainWindow::BootGame(const QString& filename) {
@@ -607,7 +607,7 @@ void GMainWindow::OnMenuInstallCIA() {
     for (const auto& piece : game_list->supported_file_extensions)
         extensions += "*." + piece + " ";
 
-    QString file_filter = tr("3DS Executable") + " (" + extensions + ")";
+    QString file_filter = tr("3DS Installation File (*CIA*)");
     file_filter += ";;" + tr("All Files (*.*)");
 
     QString filepath = QFileDialog::getOpenFileName(this, tr("Load File"),
