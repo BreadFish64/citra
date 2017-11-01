@@ -445,9 +445,11 @@ bool GMainWindow::LoadROM(const QString& filename) {
 
 bool GMainWindow::LoadCIA(const QString& filepath) {
     LOG_INFO(Frontend, "test qt");
-    FileSys::CIAContainer& CIAContainer{Loader::ResultStatus.Load(filepath.toStdString())};
-
-    const FileSys::CIAContainer result{ResultStatus.Load(filepath.toStdString())};
+    FileSys::CIAContainer* container;
+    if (container->Load(filepath.toStdString()) == Loader::ResultStatus::Success) {
+        // this CIA is valid, maybe grab a TID, icon, etc
+        LOG_INFO(Frontend, "success");
+    }
     return true;
 }
 
