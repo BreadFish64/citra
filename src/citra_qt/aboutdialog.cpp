@@ -10,6 +10,7 @@ AboutDialog::AboutDialog(QWidget* parent) : QDialog(parent), ui(new Ui::AboutDia
     ui->setupUi(this);
     ui->labelBuildInfo->setText(ui->labelBuildInfo->text().arg(
         Common::g_build_name, Common::g_scm_branch, Common::g_scm_desc));
+    setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 }
 
 AboutDialog::~AboutDialog() {
