@@ -2,12 +2,24 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#pragma once
+#ifndef ABOUTDIALOG_H
+#define ABOUTDIALOG_H
 
 #include <QDialog>
 
-class AboutDialog final : public QDialog {
+namespace Ui {
+class AboutDialog;
+}
+
+class AboutDialog : public QDialog {
     Q_OBJECT
+
 public:
-    explicit AboutDialog(QWidget* parent = nullptr);
+    explicit AboutDialog(QWidget* parent = 0);
+    ~AboutDialog();
+
+private:
+    Ui::AboutDialog* ui;
 };
+
+#endif // ABOUTDIALOG_H

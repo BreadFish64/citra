@@ -127,12 +127,13 @@ private slots:
     void OnSwapScreens();
     void OnConfigure();
     void OnToggleFilterBar();
-    void ShowAboutDialog();
     void OnDisplayTitleBars(bool);
     void ToggleFullscreen();
     void ToggleWindowMode();
     void OnCreateGraphicsSurfaceViewer();
     void OnCoreError(Core::System::ResultStatus, std::string);
+    /// Called whenever a user selects Help->About Citra
+    void OnMenuAboutCitra();
 
 private:
     void UpdateStatusBar();
