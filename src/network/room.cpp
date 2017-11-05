@@ -40,8 +40,7 @@ public:
     /// This should be a std::shared_mutex as soon as C++17 is supported
 
     RoomImpl()
-        : random_gen(std::random_device()()), NintendoOUI{0x00, 0x1F, 0x32, 0x00, 0x00, 0x00} {
-    }
+        : random_gen(std::random_device()()), NintendoOUI{0x00, 0x1F, 0x32, 0x00, 0x00, 0x00} {}
 
     /// Thread that receives and dispatches network packets
     std::unique_ptr<std::thread> room_thread;
