@@ -39,11 +39,8 @@ public:
     mutable std::mutex member_mutex; ///< Mutex for locking the members list
     /// This should be a std::shared_mutex as soon as C++17 is supported
 
-    std::string guid; /// The GUID of the room
-
     RoomImpl()
         : random_gen(std::random_device()()), NintendoOUI{0x00, 0x1F, 0x32, 0x00, 0x00, 0x00} {
-        CreateGUID();
     }
 
     /// Thread that receives and dispatches network packets
@@ -109,7 +106,7 @@ public:
      * <MessageID>ID_ROOM_INFORMATION
      * <String> room_name
      * <u32> member_slots: The max number of clients allowed in this room
-     * <String> guid
+     * <String> uid
      * <u16> port
      * <u32> num_members: the number of currently joined clients
      * This is followed by the following three values for each member:
@@ -152,7 +149,7 @@ public:
     /**
      * Creates a random ID in the form 12345678-1234-1234-1234-123456789012
      */
-    void CreateGUID();
+    void CreateUniqueID();
 };
 
 // RoomImpl
@@ -208,7 +205,7 @@ void Room::RoomImpl::HandleJoinRequest(const ENetEvent* event) {
     std::string pass;
     packet >> pass;
 
-    if (!(pass == password)) {
+    if (pass != password) {
         SendWrongPassword(event->peer);
         return;
     }
@@ -336,7 +333,7 @@ void Room::RoomImpl::BroadcastRoomInformation() {
     packet << static_cast<u8>(IdRoomInformation);
     packet << room_information.name;
     packet << room_information.member_slots;
-    packet << room_information.guid;
+    packet << room_information.uid;
     packet << room_information.port;
     packet << room_information.preferred_game;
 
@@ -474,7 +471,7 @@ void Room::RoomImpl::HandleClientDisconnection(ENetPeer* client) {
     BroadcastRoomInformation();
 }
 
-void Room::RoomImpl::CreateGUID() {
+void Room::RoomImpl::CreateUniqueID() {
     std::uniform_int_distribution<> dis(0, 9999);
     std::ostringstream stream;
     stream << std::setfill('0') << std::setw(4) << dis(random_gen);
@@ -485,7 +482,7 @@ void Room::RoomImpl::CreateGUID() {
     stream << std::setfill('0') << std::setw(4) << dis(random_gen);
     stream << std::setfill('0') << std::setw(4) << dis(random_gen);
     stream << std::setfill('0') << std::setw(4) << dis(random_gen);
-    guid = stream.str();
+    room_information.uid = stream.str();
 }
 
 // Room
@@ -511,11 +508,11 @@ bool Room::Create(const std::string& name, const std::string& server_address, u1
 
     room_impl->room_information.name = name;
     room_impl->room_information.member_slots = max_connections;
-    room_impl->room_information.guid = room_impl->guid;
     room_impl->room_information.port = server_port;
     room_impl->room_information.preferred_game = preferred_game;
     room_impl->room_information.preferred_game_id = preferred_game_id;
     room_impl->password = password;
+    room_impl->CreateUniqueID();
 
     room_impl->StartLoop();
     return true;

@@ -222,7 +222,7 @@ void RoomMember::RoomMemberImpl::HandleRoomInformationPacket(const ENetEvent* ev
     RoomInformation info{};
     packet >> info.name;
     packet >> info.member_slots;
-    packet >> info.guid;
+    packet >> info.uid;
     packet >> info.port;
     packet >> info.preferred_game;
     room_information.name = info.name;
@@ -394,15 +394,8 @@ void RoomMember::Join(const std::string& nick, const char* server_addr, u16 serv
                       u16 client_port, const MacAddress& preferred_mac,
                       const std::string password) {
     // If the member is connected, kill the connection first
-    if (room_member_impl->loop_thread) {
-        if (room_member_impl->loop_thread->joinable()) {
-            room_member_impl->SetState(State::Error);
-            room_member_impl->loop_thread->join();
-            room_member_impl->loop_thread.reset();
-
-            enet_host_destroy(room_member_impl->client);
-            room_member_impl->client = nullptr;
-        }
+    if (room_member_impl->loop_thread && room_member_impl->loop_thread->joinable()) {
+        Leave();
     }
     // If the thread isn't running but the ptr still exists, reset it
     else if (room_member_impl->loop_thread) {
@@ -450,7 +443,7 @@ void RoomMember::SendWifiPacket(const WifiPacket& wifi_packet) {
     packet << wifi_packet.channel;
     packet << wifi_packet.transmitter_address;
     packet << wifi_packet.destination_address;
-    packet << (u32)wifi_packet.data.size();
+    packet << static_cast<u32>(wifi_packet.data.size());
     packet << wifi_packet.data;
     room_member_impl->Send(std::move(packet));
 }
