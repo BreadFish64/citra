@@ -41,6 +41,7 @@
 #include "core/core.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/file_sys/cia_container.h"
+#include "core/file_sys/file_backend.h"
 #include "core/gdbstub/gdbstub.h"
 #include "core/loader/loader.h"
 #include "core/settings.h"
@@ -445,10 +446,12 @@ bool GMainWindow::LoadROM(const QString& filename) {
 
 bool GMainWindow::LoadCIA(const QString& filepath) {
     LOG_INFO(Frontend, "test qt");
-    FileSys::CIAContainer* container;
-    if (container->Load(filepath.toStdString()) == Loader::ResultStatus::Success) {
+    FileSys::CIAContainer container;
+    if (container.Load(filepath.toStdString()) == Loader::ResultStatus::Error) {
         // this CIA is valid, maybe grab a TID, icon, etc
         LOG_INFO(Frontend, "success");
+    } else {
+        LOG_INFO(Frontend, "failed");
     }
     return false;
 }
