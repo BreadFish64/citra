@@ -33,6 +33,7 @@ Loader::ResultStatus CIAContainer::Load(const FileBackend& backend) {
     // Load Title Metadata
     std::vector<u8> tmd_data(cia_header.tmd_size);
     read_result = backend.Read(GetTitleMetadataOffset(), cia_header.tmd_size, tmd_data.data());
+    LOG_DEBUG(Service_FS, "TMD Offset:         0x%08" PRIx64 " bytes", GetTitleMetadataOffset());
     if (read_result.Failed() || *read_result != cia_header.tmd_size)
         return Loader::ResultStatus::Error;
 
@@ -72,7 +73,12 @@ Loader::ResultStatus CIAContainer::Load(const std::string& filepath) {
     // Load Title Metadata
     std::vector<u8> tmd_data(cia_header.tmd_size);
     file.Seek(GetTitleMetadataOffset(), SEEK_SET);
-    if (!file.ReadBytes(tmd_data.data(), cia_header.tmd_size) != cia_header.tmd_size)
+    LOG_DEBUG(Service_FS, "CIA HEADER TMD SIZE:               %u",
+              static_cast<u32>(cia_header.tmd_size));
+    LOG_DEBUG(Service_FS, "RESULT OF FILE.READBYTES:               %u",
+              static_cast<u32>(file.ReadBytes(tmd_data.data(), cia_header.tmd_size)));
+    LOG_DEBUG(Service_FS, "TMD Offset:         0x%08" PRIx64 " bytes", GetTitleMetadataOffset());
+    if (file.ReadBytes(tmd_data.data(), cia_header.tmd_size) != cia_header.tmd_size)
         return Loader::ResultStatus::Error;
 
     result = LoadTitleMetadata(tmd_data);
@@ -227,4 +233,4 @@ void CIAContainer::Print() const {
         LOG_DEBUG(Service_FS, "Content %x Offset:   0x%08" PRIx64 " bytes", i, GetContentOffset(i));
     }
 }
-}
+} // namespace FileSys

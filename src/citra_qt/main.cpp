@@ -39,6 +39,8 @@
 #include "common/scope_exit.h"
 #include "common/string_util.h"
 #include "core/core.h"
+//#include "core/hle/service/am/am.h"
+//#include "core/hle/service/am/am.cpp"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/file_sys/cia_container.h"
 #include "core/file_sys/file_backend.h"
@@ -447,12 +449,14 @@ bool GMainWindow::LoadROM(const QString& filename) {
 bool GMainWindow::LoadCIA(const QString& filepath) {
     LOG_INFO(Frontend, "test qt");
     FileSys::CIAContainer container;
-    if (container.Load(filepath.toStdString()) == Loader::ResultStatus::Error) {
+    if (container.Load(filepath.toStdString()) == Loader::ResultStatus::Success) {
         // this CIA is valid, maybe grab a TID, icon, etc
         LOG_INFO(Frontend, "success");
     } else {
         LOG_INFO(Frontend, "failed");
     }
+    // Service::AM::CIAFile file();
+
     return false;
 }
 
