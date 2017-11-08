@@ -13,6 +13,7 @@
 
 class Config;
 class CIAContainer;
+class CIAFile;
 class EmuThread;
 class GameList;
 class GImageInfo;
@@ -79,6 +80,7 @@ private:
 
     bool LoadROM(const QString& filename);
     bool LoadCIA(const QString& filepath);
+    void InstallCIA(const QString& filepath);
     void BootGame(const QString& filename);
     void ShutdownGame();
 

@@ -75,8 +75,6 @@ Loader::ResultStatus CIAContainer::Load(const std::string& filepath) {
     file.Seek(GetTitleMetadataOffset(), SEEK_SET);
     LOG_DEBUG(Service_FS, "CIA HEADER TMD SIZE:               %u",
               static_cast<u32>(cia_header.tmd_size));
-    LOG_DEBUG(Service_FS, "RESULT OF FILE.READBYTES:               %u",
-              static_cast<u32>(file.ReadBytes(tmd_data.data(), cia_header.tmd_size)));
     LOG_DEBUG(Service_FS, "TMD Offset:         0x%08" PRIx64 " bytes", GetTitleMetadataOffset());
     if (file.ReadBytes(tmd_data.data(), cia_header.tmd_size) != cia_header.tmd_size)
         return Loader::ResultStatus::Error;
