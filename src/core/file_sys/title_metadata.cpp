@@ -59,7 +59,7 @@ Loader::ResultStatus TitleMetadata::Load(const std::vector<u8> file_data, size_t
 
     // Signature lengths are variable, and the body follows the signature
     u32 signature_size = GetSignatureSize(signature_type);
-  
+
     // The TMD body start position is rounded to the nearest 0x40 after the signature
     size_t body_start = Common::AlignUp(signature_size + sizeof(u32), 0x40);
     size_t body_end = body_start + sizeof(Body);
