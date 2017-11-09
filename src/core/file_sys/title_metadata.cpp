@@ -59,8 +59,7 @@ Loader::ResultStatus TitleMetadata::Load(const std::vector<u8> file_data, size_t
 
     // Signature lengths are variable, and the body follows the signature
     u32 signature_size = GetSignatureSize(signature_type);
-    LOG_DEBUG(Service_FS, "SIGNATURE SIZE:               %u", static_cast<u32>(signature_size));
-    LOG_DEBUG(Service_FS, "SIGNATURE TYPE:               %u", static_cast<u32>(signature_type));
+  
     // The TMD body start position is rounded to the nearest 0x40 after the signature
     size_t body_start = Common::AlignUp(signature_size + sizeof(u32), 0x40);
     size_t body_end = body_start + sizeof(Body);
@@ -72,9 +71,7 @@ Loader::ResultStatus TitleMetadata::Load(const std::vector<u8> file_data, size_t
     tmd_signature.resize(signature_size);
     memcpy(tmd_signature.data(), &file_data[offset + sizeof(u32_be)], signature_size);
     memcpy(&tmd_body, &file_data[offset + body_start], sizeof(TitleMetadata::Body));
-    LOG_DEBUG(Service_FS, "TMD CONTENT COUNT:               %u",
-              static_cast<u32>(tmd_body.content_count));
-    LOG_DEBUG(Service_FS, "BODY START:               %u", static_cast<u32>(body_start));
+
     size_t expected_size =
         body_start + sizeof(Body) + tmd_body.content_count * sizeof(ContentChunk);
     if (total_size < expected_size) {

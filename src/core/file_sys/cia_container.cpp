@@ -33,7 +33,6 @@ Loader::ResultStatus CIAContainer::Load(const FileBackend& backend) {
     // Load Title Metadata
     std::vector<u8> tmd_data(cia_header.tmd_size);
     read_result = backend.Read(GetTitleMetadataOffset(), cia_header.tmd_size, tmd_data.data());
-    LOG_DEBUG(Service_FS, "TMD Offset:         0x%08" PRIx64 " bytes", GetTitleMetadataOffset());
     if (read_result.Failed() || *read_result != cia_header.tmd_size)
         return Loader::ResultStatus::Error;
 
@@ -73,9 +72,6 @@ Loader::ResultStatus CIAContainer::Load(const std::string& filepath) {
     // Load Title Metadata
     std::vector<u8> tmd_data(cia_header.tmd_size);
     file.Seek(GetTitleMetadataOffset(), SEEK_SET);
-    LOG_DEBUG(Service_FS, "CIA HEADER TMD SIZE:               %u",
-              static_cast<u32>(cia_header.tmd_size));
-    LOG_DEBUG(Service_FS, "TMD Offset:         0x%08" PRIx64 " bytes", GetTitleMetadataOffset());
     if (file.ReadBytes(tmd_data.data(), cia_header.tmd_size) != cia_header.tmd_size)
         return Loader::ResultStatus::Error;
 
@@ -122,7 +118,7 @@ Loader::ResultStatus CIAContainer::LoadHeader(const std::vector<u8>& header_data
     if (header_data.size() - offset < sizeof(Header))
         return Loader::ResultStatus::Error;
 
-    memcpy(&cia_header, header_data.data(), sizeof(Header));
+    std::memcpy(&cia_header, header_data.data(), sizeof(Header));
 
     return Loader::ResultStatus::Success;
 }
@@ -136,7 +132,7 @@ Loader::ResultStatus CIAContainer::LoadMetadata(const std::vector<u8>& meta_data
     if (meta_data.size() - offset < sizeof(Metadata))
         return Loader::ResultStatus::Error;
 
-    memcpy(&cia_metadata, meta_data.data(), sizeof(Metadata));
+    std::memcpy(&cia_metadata, meta_data.data(), sizeof(Metadata));
 
     return Loader::ResultStatus::Success;
 }
@@ -166,13 +162,10 @@ u64 CIAContainer::GetTitleMetadataOffset() const {
 }
 
 u64 CIAContainer::GetMetadataOffset() const {
-    u64 offset =
-        Common::AlignUp(GetTitleMetadataOffset() + cia_header.tmd_size, CIA_SECTION_ALIGNMENT);
+    u64 tmd_end_offset = GetContentOffset();
 
     // Meta exists after all content in the CIA
-    for (u16 i = 0; i < cia_tmd.GetContentCount(); i++) {
-        offset += cia_tmd.GetContentSizeByIndex(i);
-    }
+    u64 offset = Common::AlignUp(tmd_end_offset + cia_header.content_size, CIA_SECTION_ALIGNMENT);
 
     return offset;
 }
@@ -181,11 +174,8 @@ u64 CIAContainer::GetContentOffset(u16 index) const {
     u64 offset =
         Common::AlignUp(GetTitleMetadataOffset() + cia_header.tmd_size, CIA_SECTION_ALIGNMENT);
     for (u16 i = 0; i < index; i++) {
-        // The content_present is a bit array which defines which content in the TMD
-        // is included in the CIA, so check the bit for this index and add if set.
-        // The bits in the content index are arranged w/ index 0 as the MSB, 7 as the LSB, etc.
-        if (cia_header.content_present[i >> 3] & 0x80 >> (i & 7))
-            offset += cia_tmd.GetContentSizeByIndex(i);
+
+        offset += GetContentSize(i);
     }
     return offset;
 }
@@ -206,9 +196,13 @@ u32 CIAContainer::GetMetadataSize() const {
     return cia_header.meta_size;
 }
 
+u64 CIAContainer::GetTotalContentSize() const {
+    return cia_header.content_size;
+}
+
 u64 CIAContainer::GetContentSize(u16 index) const {
     // If the content doesn't exist in the CIA, it doesn't have a size.
-    if (!(cia_header.content_present[index >> 3] & 0x80 >> (index & 7)))
+    if (!cia_header.isContentPresent(index))
         return 0;
 
     return cia_tmd.GetContentSizeByIndex(index);
@@ -221,7 +215,7 @@ void CIAContainer::Print() const {
     LOG_DEBUG(Service_FS, "Certificate Size: 0x%08x bytes", GetCertificateSize());
     LOG_DEBUG(Service_FS, "Ticket Size:      0x%08x bytes", GetTicketSize());
     LOG_DEBUG(Service_FS, "TMD Size:         0x%08x bytes", GetTitleMetadataSize());
-    LOG_DEBUG(Service_FS, "Meta Size:        0x%08x bytes\n", GetMetadataSize());
+    LOG_DEBUG(Service_FS, "Meta Size:        0x%08x bytes", GetMetadataSize());
 
     LOG_DEBUG(Service_FS, "Certificate Offset: 0x%08" PRIx64 " bytes", GetCertificateOffset());
     LOG_DEBUG(Service_FS, "Ticket Offset:      0x%08" PRIx64 " bytes", GetTicketOffset());
@@ -231,4 +225,4 @@ void CIAContainer::Print() const {
         LOG_DEBUG(Service_FS, "Content %x Offset:   0x%08" PRIx64 " bytes", i, GetContentOffset(i));
     }
 }
-} // namespace FileSys
+}

@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QtGui>
 #include <QtWidgets>
+#include "citra_qt/aboutdialog.h"
 #include "citra_qt/bootmanager.h"
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_dialog.h"
@@ -29,6 +30,7 @@
 #include "citra_qt/hotkeys.h"
 #include "citra_qt/main.h"
 #include "citra_qt/ui_settings.h"
+#include "citra_qt/updater/updater.h"
 #include "common/logging/backend.h"
 #include "common/logging/filter.h"
 #include "common/logging/log.h"
@@ -103,6 +105,7 @@ GMainWindow::GMainWindow() : config(new Config()), emu_thread(nullptr) {
     InitializeDebugWidgets();
     InitializeRecentFileMenuActions();
     InitializeHotkeys();
+    ShowUpdaterWidgets();
 
     SetDefaultUIGeometry();
     RestoreUIState();
@@ -120,6 +123,10 @@ GMainWindow::GMainWindow() : config(new Config()), emu_thread(nullptr) {
 
     // Show one-time "callout" messages to the user
     ShowCallouts();
+
+    if (UISettings::values.check_for_update_on_start) {
+        CheckForUpdates();
+    }
 
     QStringList args = QApplication::arguments();
     if (args.length() >= 2) {
@@ -141,6 +148,10 @@ void GMainWindow::InitializeWidgets() {
 
     game_list = new GameList(this);
     ui.horizontalLayout->addWidget(game_list);
+
+    // Setup updater
+    updater = new Updater(this);
+    UISettings::values.updater_found = updater->HasUpdater();
 
     // Create status bar
     message_label = new QLabel();
@@ -271,6 +282,13 @@ void GMainWindow::InitializeHotkeys() {
     });
 }
 
+void GMainWindow::ShowUpdaterWidgets() {
+    ui.action_Check_For_Updates->setVisible(UISettings::values.updater_found);
+    ui.action_Open_Maintenance_Tool->setVisible(UISettings::values.updater_found);
+
+    connect(updater, &Updater::CheckUpdatesDone, this, &GMainWindow::OnUpdateFound);
+}
+
 void GMainWindow::SetDefaultUIGeometry() {
     // geometry: 55% of the window contents are in the upper screen half, 45% in the lower half
     const QRect screenRect = QApplication::desktop()->screenGeometry(this);
@@ -345,6 +363,15 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui.action_Show_Status_Bar, &QAction::triggered, statusBar(), &QStatusBar::setVisible);
     ui.action_Fullscreen->setShortcut(GetHotkey("Main Window", "Fullscreen", this)->key());
     connect(ui.action_Fullscreen, &QAction::triggered, this, &GMainWindow::ToggleFullscreen);
+
+    // Help
+    connect(ui.action_FAQ, &QAction::triggered,
+            []() { QDesktopServices::openUrl(QUrl("https://citra-emu.org/wiki/faq/")); });
+    connect(ui.action_About, &QAction::triggered, this, &GMainWindow::OnMenuAboutCitra);
+    connect(ui.action_Check_For_Updates, &QAction::triggered, this,
+            &GMainWindow::OnCheckForUpdates);
+    connect(ui.action_Open_Maintenance_Tool, &QAction::triggered, this,
+            &GMainWindow::OnOpenUpdater);
 }
 
 void GMainWindow::OnDisplayTitleBars(bool show) {
@@ -365,6 +392,73 @@ void GMainWindow::OnDisplayTitleBars(bool show) {
                 delete old;
         }
     }
+}
+
+void GMainWindow::OnCheckForUpdates() {
+    explicit_update_check = true;
+    CheckForUpdates();
+}
+
+void GMainWindow::CheckForUpdates() {
+    if (updater->CheckForUpdates()) {
+        LOG_INFO(Frontend, "Update check started");
+    } else {
+        LOG_WARNING(Frontend, "Unable to start check for updates");
+    }
+}
+
+void GMainWindow::OnUpdateFound(bool found, bool error) {
+    if (error) {
+        LOG_WARNING(Frontend, "Update check failed");
+        return;
+    }
+
+    if (!found) {
+        LOG_INFO(Frontend, "No updates found");
+
+        // If the user explicitly clicked the "Check for Updates" button, we are
+        //  going to want to show them a prompt anyway.
+        if (explicit_update_check) {
+            explicit_update_check = false;
+            ShowNoUpdatePrompt();
+        }
+        return;
+    }
+
+    if (emulation_running && !explicit_update_check) {
+        LOG_INFO(Frontend, "Update found, deferring as game is running");
+        defer_update_prompt = true;
+        return;
+    }
+
+    LOG_INFO(Frontend, "Update found!");
+    explicit_update_check = false;
+
+    ShowUpdatePrompt();
+}
+
+void GMainWindow::ShowUpdatePrompt() {
+    defer_update_prompt = false;
+
+    auto result = QMessageBox::question(
+        this, tr("Update available!"),
+        tr("An update for Citra is available. Do you wish to install it now?<br /><br />"
+           "This <b>will</b> terminate emulation, if it is running."),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+
+    if (result == QMessageBox::Yes) {
+        updater->LaunchUIOnExit();
+        close();
+    }
+}
+
+void GMainWindow::ShowNoUpdatePrompt() {
+    QMessageBox::information(this, tr("No update found"), tr("No update has been found for Citra."),
+                             QMessageBox::Ok, QMessageBox::Ok);
+}
+
+void GMainWindow::OnOpenUpdater() {
+    updater->LaunchUI();
 }
 
 bool GMainWindow::LoadROM(const QString& filename) {
@@ -542,6 +636,10 @@ void GMainWindow::ShutdownGame() {
     emu_frametime_label->setVisible(false);
 
     emulation_running = false;
+
+    if (defer_update_prompt) {
+        ShowUpdatePrompt();
+    }
 }
 
 void GMainWindow::StoreRecentFile(const QString& filename) {
@@ -841,6 +939,11 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
             message_label->setVisible(true);
         }
     }
+}
+
+void GMainWindow::OnMenuAboutCitra() {
+    AboutDialog about{this};
+    about.exec();
 }
 
 bool GMainWindow::ConfirmClose() {

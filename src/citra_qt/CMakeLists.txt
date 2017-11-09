@@ -23,8 +23,10 @@ set(SRCS
             debugger/profiler.cpp
             debugger/registers.cpp
             debugger/wait_tree.cpp
+            updater/updater.cpp
             util/spinbox.cpp
             util/util.cpp
+            aboutdialog.cpp
             bootmanager.cpp
             game_list.cpp
             hotkeys.cpp
@@ -55,8 +57,11 @@ set(HEADERS
             debugger/profiler.h
             debugger/registers.h
             debugger/wait_tree.h
+            updater/updater.h
+            updater/updater_p.h
             util/spinbox.h
             util/util.h
+            aboutdialog.h
             bootmanager.h
             game_list.h
             game_list_p.h
@@ -75,6 +80,7 @@ set(UIS
             configuration/configure_system.ui
             configuration/configure_web.ui
             debugger/registers.ui
+            aboutdialog.ui
             hotkeys.ui
             main.ui
             )

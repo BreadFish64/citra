@@ -61,37 +61,41 @@ public:
     u32 GetTicketSize() const;
     u32 GetTitleMetadataSize() const;
     u32 GetMetadataSize() const;
+    u64 GetTotalContentSize() const;
     u64 GetContentSize(u16 index = 0) const;
 
     void Print() const;
 
 private:
     struct Header {
-        u32 header_size;
-        u16 type;
-        u16 version;
-        u32 cert_size;
-        u32 tik_size;
-        u32 tmd_size;
-        u32 meta_size;
-        u64 content_size;
+        u32_le header_size;
+        u16_le type;
+        u16_le version;
+        u32_le cert_size;
+        u32_le tik_size;
+        u32_le tmd_size;
+        u32_le meta_size;
+        u64_le content_size;
         std::array<u8, CIA_CONTENT_BITS_SIZE> content_present;
+
+        bool isContentPresent(u16 index) const {
+            // The content_present is a bit array which defines which content in the TMD
+            // is included in the CIA, so check the bit for this index and add if set.
+            // The bits in the content index are arranged w/ index 0 as the MSB, 7 as the LSB, etc.
+            return (content_present[index >> 3] & (0x80 >> (index & 7)));
+        }
     };
 
     static_assert(sizeof(Header) == CIA_HEADER_SIZE, "CIA Header structure size is wrong");
 
     struct Metadata {
-        std::array<u64, 0x30> dependencies;
+        std::array<u64_le, 0x30> dependencies;
         std::array<u8, 0x180> reserved;
-        u32 core_version;
+        u32_le core_version;
         std::array<u8, 0xfc> reserved_2;
     };
 
     static_assert(sizeof(Metadata) == CIA_METADATA_SIZE, "CIA Metadata structure size is wrong");
-
-    bool loaded = false;
-    std::string filepath;
-    std::unique_ptr<FileBackend> backend;
 
     Header cia_header;
     Metadata cia_metadata;

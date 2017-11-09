@@ -62,6 +62,7 @@ set(SRCS
             hle/kernel/timer.cpp
             hle/kernel/vm_manager.cpp
             hle/kernel/wait_object.cpp
+            hle/kernel/ipc.cpp
             hle/lock.cpp
             hle/romfs.cpp
             hle/service/ac/ac.cpp
@@ -218,13 +219,16 @@ set(HEADERS
             file_sys/archive_selfncch.h
             file_sys/archive_source_sd_savedata.h
             file_sys/archive_systemsavedata.h
+            file_sys/cia_container.h
             file_sys/directory_backend.h
             file_sys/disk_archive.h
             file_sys/errors.h
             file_sys/file_backend.h
             file_sys/ivfc_archive.h
+            file_sys/ncch_container.h
             file_sys/path_parser.h
             file_sys/savedata_archive.h
+            file_sys/title_metadata.h
             frontend/camera/blank_camera.h
             frontend/camera/factory.h
             frontend/camera/interface.h
@@ -248,6 +252,7 @@ set(HEADERS
             hle/kernel/event.h
             hle/kernel/handle_table.h
             hle/kernel/hle_ipc.h
+            hle/kernel/ipc.h
             hle/kernel/kernel.h
             hle/kernel/memory.h
             hle/kernel/mutex.h
