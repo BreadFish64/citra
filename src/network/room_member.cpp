@@ -272,10 +272,6 @@ void RoomMember::RoomMemberImpl::HandleWifiPackets(const ENetEvent* event) {
     packet >> wifi_packet.channel;
     packet >> wifi_packet.transmitter_address;
     packet >> wifi_packet.destination_address;
-
-    u32 data_length;
-    packet >> data_length;
-    wifi_packet.data.resize(data_length);
     packet >> wifi_packet.data;
 
     Invoke<WifiPacket>(wifi_packet);
@@ -443,7 +439,6 @@ void RoomMember::SendWifiPacket(const WifiPacket& wifi_packet) {
     packet << wifi_packet.channel;
     packet << wifi_packet.transmitter_address;
     packet << wifi_packet.destination_address;
-    packet << static_cast<u32>(wifi_packet.data.size());
     packet << wifi_packet.data;
     room_member_impl->Send(std::move(packet));
 }
