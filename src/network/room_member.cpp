@@ -388,7 +388,7 @@ RoomInformation RoomMember::GetRoomInformation() const {
 
 void RoomMember::Join(const std::string& nick, const char* server_addr, u16 server_port,
                       u16 client_port, const MacAddress& preferred_mac,
-                      const std::string password) {
+                      const std::string& password) {
     // If the member is connected, kill the connection first
     if (room_member_impl->loop_thread && room_member_impl->loop_thread->joinable()) {
         Leave();
