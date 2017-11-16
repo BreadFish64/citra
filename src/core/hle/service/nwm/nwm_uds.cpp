@@ -80,7 +80,7 @@ static NetworkInfo network_info;
 static std::map<MacAddress, u32> node_map;
 
 // Event that will generate and send the 802.11 beacon frames.
-static int beacon_broadcast_event;
+static CoreTiming::EventType* beacon_broadcast_event;
 
 // Callback identifier for the OnWifiPacketReceived event.
 static Network::RoomMember::CallbackHandle<Network::WifiPacket> wifi_packet_received;
