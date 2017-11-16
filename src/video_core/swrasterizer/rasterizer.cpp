@@ -293,16 +293,16 @@ static void ProcessTriangleInternal(const Vertex& v0, const Vertex& v1, const Ve
             };
 
             Math::Vec4<u8> primary_color{
-                (u8)(
+                (u8)round(
                     GetInterpolatedAttribute(v0.color.r(), v1.color.r(), v2.color.r()).ToFloat32() *
                     255),
-                (u8)(
+                (u8)round(
                     GetInterpolatedAttribute(v0.color.g(), v1.color.g(), v2.color.g()).ToFloat32() *
                     255),
-                (u8)(
+                (u8)round(
                     GetInterpolatedAttribute(v0.color.b(), v1.color.b(), v2.color.b()).ToFloat32() *
                     255),
-                (u8)(
+                (u8)round(
                     GetInterpolatedAttribute(v0.color.a(), v1.color.a(), v2.color.a()).ToFloat32() *
                     255),
             };
@@ -331,6 +331,7 @@ static void ProcessTriangleInternal(const Vertex& v0, const Vertex& v1, const Ve
                 // Only unit 0 respects the texturing type (according to 3DBrew)
                 // TODO: Refactor so cubemaps and shadowmaps can be handled
                 PAddr texture_address = texture.config.GetPhysicalAddress();
+                if (texture_address == 0) continue;
                 if (i == 0) {
                     switch (texture.config.type) {
                     case TexturingRegs::TextureConfig::Texture2D:
