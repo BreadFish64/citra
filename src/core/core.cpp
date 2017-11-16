@@ -132,6 +132,12 @@ PerfStats::Results System::GetAndResetPerfStats() {
     return perf_stats.GetAndResetStats(CoreTiming::GetGlobalTimeUs());
 }
 
+    void System::ExitCallback() {
+    if (exit_callback) {
+        exit_callback();
+    }
+}
+
 void System::Reschedule() {
     if (!reschedule_pending) {
         return;

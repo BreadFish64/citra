@@ -272,6 +272,8 @@ int main(int argc, char** argv) {
         }
     }
 
+    system.SetExitCallback([&]{ emu_window->CloseWindow(); });
+
     while (emu_window->IsOpen()) {
         system.RunLoop();
     }

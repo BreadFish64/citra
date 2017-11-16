@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include "common/common_types.h"
@@ -92,6 +93,12 @@ public:
     /// Prepare the core emulation for a reschedule
     void PrepareReschedule();
 
+    void SetExitCallback(std::function<void()> callback) {
+        exit_callback = callback;
+    }
+
+    void ExitCallback();
+
     PerfStats::Results GetAndResetPerfStats();
 
     /**
@@ -143,6 +150,8 @@ private:
 
     /// Telemetry session for this emulation session
     std::unique_ptr<Core::TelemetrySession> telemetry_session;
+
+    std::function<void()> exit_callback;
 
     static System s_instance;
 
