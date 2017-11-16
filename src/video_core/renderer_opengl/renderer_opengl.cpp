@@ -234,8 +234,6 @@ void RendererOpenGL::LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color
  * Initializes the OpenGL state and creates persistent objects.
  */
 void RendererOpenGL::InitOpenGLObjects() {
-    glClearColor(Settings::values.bg_red, Settings::values.bg_green, Settings::values.bg_blue,
-                 0.0f);
 
     // Link shaders and get variable locations
     shader.Create(vertex_shader, fragment_shader);
@@ -383,6 +381,8 @@ void RendererOpenGL::DrawScreens() {
     const auto& bottom_screen = layout.bottom_screen;
 
     glViewport(0, 0, layout.width, layout.height);
+        glClearColor(Settings::values.bg_red, Settings::values.bg_green, Settings::values.bg_blue,
+                 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     // Set projection matrix
