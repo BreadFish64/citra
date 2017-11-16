@@ -48,8 +48,15 @@ void FormatLogMessage(const Entry& entry, char* out_text, size_t text_len) {
     const char* class_name = GetLogClassName(entry.log_class);
     const char* level_name = GetLevelName(entry.log_level);
 
-    snprintf(out_text, text_len, "[%4u.%06u] %s <%s> %s: %s", time_seconds, time_fractional,
-             class_name, level_name, TrimSourcePath(entry.location.c_str()), entry.message.c_str());
+    if (entry.count < 2) {
+        snprintf(out_text, text_len, "[%4u.%06u] %s <%s> %s: %s", time_seconds, time_fractional,
+                 class_name, level_name, TrimSourcePath(entry.location.c_str()),
+                 entry.message.c_str());
+    } else {
+        snprintf(out_text, text_len, "[%4u.%06u] %s <%s> %s: %s (repeats %d times)", time_seconds,
+                 time_fractional, class_name, level_name, TrimSourcePath(entry.location.c_str()),
+                 entry.message.c_str(), entry.count);
+    }
 }
 
 void PrintMessage(const Entry& entry) {

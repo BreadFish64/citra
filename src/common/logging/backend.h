@@ -7,7 +7,6 @@
 #include <chrono>
 #include <cstdarg>
 #include <string>
-#include <utility>
 #include "common/logging/log.h"
 
 namespace Log {
@@ -24,12 +23,18 @@ struct Entry {
     Level log_level;
     std::string location;
     std::string message;
+    u32 count{0};
 
     Entry() = default;
     Entry(Entry&& o) = default;
 
     Entry& operator=(Entry&& o) = default;
 };
+
+inline bool operator==(const Entry& lhs, const Entry& rhs) {
+    return (lhs.log_class == rhs.log_class) && (lhs.log_level == rhs.log_level) &&
+           (lhs.location == rhs.location) && (lhs.message == rhs.message);
+}
 
 /**
  * Returns the name of the passed log class as a C-string. Subclasses are separated by periods
@@ -47,4 +52,4 @@ Entry CreateEntry(Class log_class, Level log_level, const char* filename, unsign
                   const char* function, const char* format, va_list args);
 
 void SetFilter(Filter* filter);
-}
+} // namespace Log

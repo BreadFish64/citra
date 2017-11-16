@@ -152,6 +152,19 @@ void LogMessage(Class log_class, Level log_level, const char* filename, unsigned
     Entry entry = CreateEntry(log_class, log_level, filename, line_nr, function, format, args);
     va_end(args);
 
+    static Entry prev_entry{};
+    if (entry == prev_entry) {
+        prev_entry.count++;
+        prev_entry.timestamp = entry.timestamp;
+        if (prev_entry.count == 100) {
+            PrintColoredMessage(prev_entry);
+            prev_entry.count = 0;
+        }
+        return;
+    }
+    if (prev_entry.count != 0)
+        PrintColoredMessage(prev_entry);
     PrintColoredMessage(entry);
+    prev_entry = std::move(entry);
 }
-}
+} // namespace Log
