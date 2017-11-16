@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <memory>
+#include <regex>
 #include <string>
 #include <thread>
 
@@ -36,17 +37,63 @@
 #include "core/gdbstub/gdbstub.h"
 #include "core/loader/loader.h"
 #include "core/settings.h"
+#include "network/network.h"
 
 static void PrintHelp(const char* argv0) {
     std::cout << "Usage: " << argv0
               << " [options] <filename>\n"
-                 "-g, --gdbport=NUMBER  Enable gdb stub on port NUMBER\n"
-                 "-h, --help            Display this help and exit\n"
-                 "-v, --version         Output version information and exit\n";
+                 "-g, --gdbport=NUMBER Enable gdb stub on port NUMBER\n"
+                 "-m, --multiplayer=nick:password@address:port"
+                 " Nickname, password, address and port for multiplayer\n"
+                 "-h, --help           Display this help and exit\n"
+                 "-v, --version        Output version information and exit\n";
 }
 
 static void PrintVersion() {
     std::cout << "Citra " << Common::g_scm_branch << " " << Common::g_scm_desc << std::endl;
+}
+
+static void OnStateChanged(const Network::RoomMember::State& state) {
+    switch (state) {
+    case Network::RoomMember::State::Idle:
+        LOG_INFO(Network, "State: Idle");
+        break;
+    case Network::RoomMember::State::Joining:
+        LOG_INFO(Network, "State: Joining");
+        break;
+    case Network::RoomMember::State::Joined:
+        LOG_INFO(Network, "State: Joined");
+        break;
+    case Network::RoomMember::State::LostConnection:
+        LOG_INFO(Network, "State: LostConnection");
+        break;
+    case Network::RoomMember::State::CouldNotConnect:
+        LOG_INFO(Network, "State: CouldNotConnect");
+        exit(1);
+        break;
+    case Network::RoomMember::State::NameCollision:
+        LOG_INFO(Network, "State: NameCollision");
+        exit(1);
+        break;
+    case Network::RoomMember::State::MacCollision:
+        LOG_INFO(Network, "State: MacCollision");
+        exit(1);
+        break;
+    case Network::RoomMember::State::WrongPassword:
+        LOG_INFO(Network, "State: WrongPassword");
+        exit(1);
+        break;
+    case Network::RoomMember::State::WrongVersion:
+        LOG_INFO(Network, "State: WrongVersion");
+        exit(1);
+        break;
+    default:
+        break;
+    }
+}
+
+static void OnMessageReceived(const Network::ChatEntry& msg) {
+    std::cout << std::endl << msg.nickname << ": " << msg.message << std::endl << std::endl;
 }
 
 /// Application entry point
@@ -67,15 +114,22 @@ int main(int argc, char** argv) {
 #endif
     std::string filepath;
 
+    bool use_multiplayer(false);
+    std::string nickname{};
+    std::string password{};
+    std::string address{};
+    u16 port = Network::DefaultRoomPort;
+
     static struct option long_options[] = {
         {"gdbport", required_argument, 0, 'g'},
+        {"multiplayer", required_argument, 0, 'm'},
         {"help", no_argument, 0, 'h'},
         {"version", no_argument, 0, 'v'},
         {0, 0, 0, 0},
     };
 
     while (optind < argc) {
-        char arg = getopt_long(argc, argv, "g:hv", long_options, &option_index);
+        char arg = getopt_long(argc, argv, "g:m:hv", long_options, &option_index);
         if (arg != -1) {
             switch (arg) {
             case 'g':
@@ -89,6 +143,44 @@ int main(int argc, char** argv) {
                     exit(1);
                 }
                 break;
+            case 'm': {
+                use_multiplayer = true;
+                std::string str_arg(optarg);
+                std::regex re("^([^:\n]+)(?:(.+))?@(.+)(?:([0-9]+))?$");
+                if (!std::regex_match(str_arg, re)) {
+                    std::cout << "Wrong format for option --multiplayer\n";
+                    PrintHelp(argv[0]);
+                    return 0;
+                }
+                std::string sub_str1 = str_arg.substr(0, str_arg.find("@"));
+                std::string sub_str2 =
+                    str_arg.substr(sub_str1.size() + 1, str_arg.size() - sub_str1.size());
+                nickname = sub_str1.substr(0, sub_str1.find(":"));
+                if (nickname.size() != sub_str1.size()) {
+                    password =
+                        sub_str1.substr(nickname.size() + 1, sub_str1.size() - nickname.size());
+                }
+                address = sub_str2.substr(0, sub_str2.find(":"));
+                if (address.size() != sub_str2.size()) {
+                    port = std::stoi(
+                        sub_str2.substr(address.size() + 1, sub_str2.size() - address.size()));
+                }
+                std::regex nickname_re("^[a-zA-Z0-9._- ]+$");
+                if (!std::regex_match(nickname, nickname_re)) {
+                    std::cout
+                        << "Nickname is not valid. Must be 4 to 20 alphanumeric characters.\n";
+                    return 0;
+                }
+                if (address.empty()) {
+                    std::cout << "Address to room must not be empty.\n";
+                    return 0;
+                }
+                if (port > 65535) {
+                    std::cout << "Port must be between 0 and 65535.\n";
+                    return 0;
+                }
+                break;
+            }
             case 'h':
                 PrintHelp(argv[0]);
                 return 0;
@@ -166,6 +258,19 @@ int main(int argc, char** argv) {
     }
 
     Core::Telemetry().AddField(Telemetry::FieldType::App, "Frontend", "SDL");
+
+    if (use_multiplayer) {
+        if (auto member = Network::GetRoomMember().lock()) {
+            member->BindOnChatMessageRecieved(OnMessageReceived);
+            member->BindOnStateChanged(OnStateChanged);
+            LOG_INFO(Network, "Start connection to %s:%u with nickname %s", address.c_str(), port,
+                     nickname.c_str());
+            member->Join(nickname, address.c_str(), port, 0, Network::NoPreferredMac, password);
+        } else {
+            LOG_ERROR(Network, "Could not access RoomMember");
+            return 0;
+        }
+    }
 
     while (emu_window->IsOpen()) {
         system.RunLoop();
