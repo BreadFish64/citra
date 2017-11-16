@@ -263,6 +263,10 @@ static void DisplayTransfer(const Regs::DisplayTransferConfig& config) {
                 }
             }
 
+                        if (!dst_pointer) {
+                            LOG_CRITICAL(HW_GPU, "Invalid address %08x", dst_pointer);
+                            break;
+                        }
             const u8* src_pixel = src_pointer + src_offset;
             src_color = DecodePixel(config.input_format, src_pixel);
             if (config.scaling == config.ScaleX) {

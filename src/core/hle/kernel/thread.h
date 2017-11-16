@@ -27,6 +27,7 @@ enum ThreadProcessorId : s32 {
     THREADPROCESSORID_ALL = -1,     ///< Run thread on either core
     THREADPROCESSORID_0 = 0,        ///< Run thread on core 0 (AppCore)
     THREADPROCESSORID_1 = 1,        ///< Run thread on core 1 (SysCore)
+    THREADPROCESSORID_2 = 2,        ///< Run thread on core 2 (SysCore)
     THREADPROCESSORID_MAX = 2,      ///< Processor ID must be less than this
 };
 

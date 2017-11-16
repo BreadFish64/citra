@@ -84,7 +84,7 @@ void ARM_DynCom::ExecuteInstructions(int num_instructions) {
     // executing one instruction at a time. Otherwise, if a block is being executed, more
     // instructions may actually be executed than specified.
     unsigned ticks_executed = InterpreterMainLoop(state.get());
-    CoreTiming::AddTicks(ticks_executed);
+    CoreTiming::AddTicks(4000);
 }
 
 void ARM_DynCom::SaveContext(ThreadContext& ctx) {

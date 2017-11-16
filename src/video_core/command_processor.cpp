@@ -229,6 +229,10 @@ static void Draw(u32 command_id) {
 
     const auto& index_info = regs.pipeline.index_array;
     const u8* index_address_8 = Memory::GetPhysicalPointer(base_address + index_info.offset);
+            if (!index_address_8) {
+                LOG_CRITICAL(HW_GPU, "Invalid index_address_8 %08x", index_address_8);
+                return;
+            }
     const u16* index_address_16 = reinterpret_cast<const u16*>(index_address_8);
     bool index_u16 = index_info.format != 0;
 

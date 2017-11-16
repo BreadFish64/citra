@@ -222,6 +222,9 @@ std::vector<std::unique_ptr<WaitTreeItem>> WaitTreeThread::GetChildren() const {
     case ThreadProcessorId::THREADPROCESSORID_1:
         processor = tr("SysCore");
         break;
+    case ThreadProcessorId::THREADPROCESSORID_2:
+        processor = tr("SysCore2");
+        break;
     default:
         processor = tr("Unknown processor %1").arg(thread.processor_id);
         break;
