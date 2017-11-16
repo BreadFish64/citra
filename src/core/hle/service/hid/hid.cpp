@@ -57,6 +57,7 @@ static std::atomic<bool> is_device_reload_pending;
 static std::array<std::unique_ptr<Input::ButtonDevice>, Settings::NativeButton::NUM_BUTTONS_HID>
     buttons;
 static std::unique_ptr<Input::AnalogDevice> circle_pad;
+static PadState inputs_this_frame;
 static std::unique_ptr<Input::MotionDevice> motion_device;
 static std::unique_ptr<Input::TouchDevice> touch_device;
 
@@ -140,6 +141,7 @@ static void UpdatePadCallback(u64 userdata, int cycles_late) {
     state.circle_down.Assign(direction.down);
     state.circle_left.Assign(direction.left);
     state.circle_right.Assign(direction.right);
+    inputs_this_frame.hex = state.hex;
 
     mem->pad.current_state.hex = state.hex;
     mem->pad.index = next_pad_index;
@@ -271,6 +273,10 @@ static void UpdateGyroscopeCallback(u64 userdata, int cycles_late) {
 
     // Reschedule recurrent event
     CoreTiming::ScheduleEvent(gyroscope_update_ticks - cycles_late, gyroscope_update_event);
+}
+
+PadState& GetInputsThisFrame() {
+    return inputs_this_frame;
 }
 
 void GetIPCHandles(Service::Interface* self) {
