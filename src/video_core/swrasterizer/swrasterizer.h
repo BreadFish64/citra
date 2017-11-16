@@ -22,6 +22,7 @@ class SWRasterizer : public RasterizerInterface {
     void NotifyPicaRegisterChanged(u32 id) override {}
     void FlushAll() override {}
     void FlushRegion(PAddr addr, u32 size) override {}
+    void InvalidateRegion(PAddr addr, u32 size) override {}
     void FlushAndInvalidateRegion(PAddr addr, u32 size) override {}
 };
 

@@ -124,6 +124,14 @@ public:
         GLuint shader_program;   // GL_CURRENT_PROGRAM
     } draw;
 
+    struct {
+        bool enabled; // GL_SCISSOR_TEST
+        GLint x;
+        GLint y;
+        GLsizei width;
+        GLsizei height;
+   } scissor;
+
     std::array<bool, 2> clip_distance; // GL_CLIP_DISTANCE
 
     OpenGLState();

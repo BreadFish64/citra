@@ -69,6 +69,12 @@ OpenGLState::OpenGLState() {
     draw.uniform_buffer = 0;
     draw.shader_program = 0;
 
+    scissor.enabled = false;
+    scissor.x = 0;
+    scissor.y = 0;
+    scissor.width = 0;
+    scissor.height = 0;
+
     clip_distance = {};
 }
 
@@ -258,6 +264,22 @@ void OpenGLState::Apply() const {
     // Shader program
     if (draw.shader_program != cur_state.draw.shader_program) {
         glUseProgram(draw.shader_program);
+    }
+
+    // Scissor test
+    if (scissor.enabled != cur_state.scissor.enabled) {
+        if (scissor.enabled) {
+            glEnable(GL_SCISSOR_TEST);
+        } else {
+            glDisable(GL_SCISSOR_TEST);
+        }
+    }
+
+    if (scissor.x != cur_state.scissor.x ||
+        scissor.y != cur_state.scissor.y ||
+        scissor.width != cur_state.scissor.width ||
+        scissor.height != cur_state.scissor.height) {
+        glScissor(scissor.x, scissor.y, scissor.width, scissor.height);
     }
 
     // Clip distance
