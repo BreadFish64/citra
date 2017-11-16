@@ -762,7 +762,7 @@ void AppletUtility(Service::Interface* self) {
     rb.Push(RESULT_SUCCESS); // No error
 
     LOG_WARNING(Service_APT,
-                "(STUBBED) called command=0x%08X, input_size=0x%08X, output_size=0x%08X, "
+                "(STUBBED) called command=0x%X, input_size=0x%X, output_size=0x%X, "
                 "input_addr=0x%08X, output_addr=0x%08X",
                 utility_command, input_size, output_size, input_addr, output_addr);
 }

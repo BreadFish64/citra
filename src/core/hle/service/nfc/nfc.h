@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "common/common_funcs.h"
 #include "common/common_types.h"
 
 namespace Service {
@@ -11,6 +12,12 @@ namespace Service {
 class Interface;
 
 namespace NFC {
+
+enum class OperationType : u8 {
+    Unknown = 1,
+    NFCTag = 2,
+    RawNFC = 3,
+};
 
 enum class TagState : u8 {
     NotInitialized = 0,
@@ -26,11 +33,55 @@ enum class CommunicationStatus : u8 {
     NfcInitialized = 2,
 };
 
+struct Date {
+    u16 year;
+    u8 month;
+    u8 day;
+};
+
+struct AmiiboSettings {
+    u8 mii[0x60];
+    u16 nick_name[11];
+    u8 flags;
+    u8 country;
+    Date setup_date;
+    INSERT_PADDING_BYTES(0x2C);
+};
+static_assert(sizeof(AmiiboSettings) == 0xA8, "AmiiboSettings size is wrong");
+
+struct AppDataWriteStruct {
+    u8 id[10];
+    u8 id_size;
+    INSERT_PADDING_BYTES(0x15);
+};
+
+struct TagInfo {
+    AppDataWriteStruct tag_id;
+    u8 protocol;
+    u8 type;
+    INSERT_PADDING_BYTES(0xA);
+};
+static_assert(sizeof(TagInfo) == 0x2C, "TagInfo size is wrong");
+
+struct AmiiboConfig {
+    Date last_write_date;
+    u16 write_counter;
+    u8 character_id[3];
+    u8 series_id;
+    u16 amiibo_id;
+    u8 type;
+    u8 version;
+    u16 application_data_size = 0xD8;
+    INSERT_PADDING_BYTES(0x30);
+};
+static_assert(sizeof(AmiiboConfig) == 0x40, "AmiiboConfig size is wrong");
+
+
 /**
  * NFC::Initialize service function
  *  Inputs:
  *      0 : Header code [0x00010040]
- *      1 : (u8) unknown parameter. Can be either value 0x1 or 0x2
+ *      1 : (u8) OperationType
  *  Outputs:
  *      1 : Result of function, 0 on success, otherwise error code
  */
@@ -40,7 +91,7 @@ void Initialize(Interface* self);
  * NFC::Shutdown service function
  *  Inputs:
  *      0 : Header code [0x00020040]
- *      1 : (u8) unknown parameter
+ *      1 : (u8) OperationType
  *  Outputs:
  *      1 : Result of function, 0 on success, otherwise error code
  */
@@ -101,6 +152,8 @@ void LoadAmiiboData(Interface* self);
  */
 void ResetTagScanState(Interface* self);
 
+void UpdateStoredAmiiboData(Interface* self);
+
 /**
  * NFC::GetTagInRangeEvent service function
  *  Inputs:
@@ -142,6 +195,21 @@ void GetTagState(Interface* self);
  *      2 : (u8) Communication state
  */
 void CommunicationGetStatus(Interface* self);
+
+
+void GetTagInfo(Interface* self);
+
+void OpenAppData(Interface* self);
+
+void ReadAppData(Interface* self);
+
+void WriteAppData(Interface* self);
+
+void GetAmiiboSettings(Interface* self);
+
+void GetAmiiboConfig(Interface* self);
+
+void IsAvailableFontRegion(Interface* self);
 
 /// Initialize all NFC services.
 void Init();
