@@ -36,6 +36,8 @@ public:
     }
 
     void ValidateHeader() {
+        u32 normal = header.normal_params_size;
+        u32 trans = header.translate_params_size;
         DEBUG_ASSERT_MSG(index == TotalSize(), "Operations do not match the header (cmd 0x%x)",
                          header.raw);
     }
