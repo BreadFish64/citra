@@ -20,7 +20,7 @@ public:
      *               meaning of this string.
      * @returns a unique_ptr to the created camera object.
      */
-    virtual std::unique_ptr<CameraInterface> Create(const std::string& config) const = 0;
+    virtual std::unique_ptr<CameraInterface> Create(int camera_id) const = 0;
 };
 
 /**
@@ -36,6 +36,6 @@ void RegisterFactory(const std::string& name, std::unique_ptr<CameraFactory> fac
  * @param config Configuration string to create the camera. The meaning of this string is
  *     defined by the factory.
  */
-std::unique_ptr<CameraInterface> CreateCamera(const std::string& name, const std::string& config);
+std::unique_ptr<CameraInterface> CreateCamera(int camera_id);
 
 } // namespace Camera

@@ -1036,8 +1036,7 @@ void DriverInitialize(Service::Interface* self) {
             context.resolution =
                 context_id == 0 ? PRESET_RESOLUTION[5 /*DS_LCD*/] : PRESET_RESOLUTION[0 /*VGA*/];
         }
-        camera.impl = Camera::CreateCamera(Settings::values.camera_name[camera_id],
-                                           Settings::values.camera_config[camera_id]);
+        camera.impl = Camera::CreateCamera(camera_id);
         camera.impl->SetFlip(camera.contexts[0].flip);
         camera.impl->SetEffect(camera.contexts[0].effect);
         camera.impl->SetFormat(camera.contexts[0].format);

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui version="4.0">
+ <class>ConfigureCamera</class>
+ <widget class="QWidget" name="ConfigureCamera">
+  <layout class="QVBoxLayout">
+    <item>
+      <widget class="QGroupBox">
+        <property name="title">
+          <string>Rear Right Camera</string>
+        </property>
+        <layout class="QVBoxLayout">
+          <item>
+            <layout class="QHBoxLayout">
+              <item>
+                <layout class="QHBoxLayout">
+                  <property name="alignment">
+                    <set>Qt::AlignTop</set>
+                  </property>
+                  <item>
+                    <widget class="QLabel">
+                      <property name="text">
+                        <string>Camera mode:</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QComboBox" name="camera_outer_right_mode"></widget>
+                  </item>
+                </layout>
+              </item>
+              <item>
+                <widget class="DropArea" name="camera_outer_right_drop_area"></widget>
+              </item>
+            </layout>
+          </item>
+        </layout>
+      </widget>
+    </item>
+    <item>
+      <widget class="QGroupBox">
+        <property name="title">
+          <string>Rear Left Camera</string>
+        </property>
+        <layout class="QVBoxLayout">
+          <item>
+            <layout class="QHBoxLayout">
+              <item>
+                <layout class="QHBoxLayout">
+                  <property name="alignment">
+                    <set>Qt::AlignTop</set>
+                  </property>
+                  <item>
+                    <widget class="QLabel">
+                      <property name="text">
+                        <string>Camera mode:</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QComboBox" name="camera_outer_left_mode"></widget>
+                  </item>
+                </layout>
+              </item>
+              <item>
+                <widget class="DropArea" name="camera_outer_left_drop_area"></widget>
+              </item>
+            </layout>
+          </item>
+        </layout>
+      </widget>
+    </item>
+    <item>
+      <widget class="QGroupBox">
+        <property name="title">
+          <string>Front Camera</string>
+        </property>
+        <layout class="QVBoxLayout">
+          <item>
+            <layout class="QHBoxLayout">
+              <item>
+                <layout class="QHBoxLayout">
+                  <property name="alignment">
+                    <set>Qt::AlignTop</set>
+                  </property>
+                  <item>
+                    <widget class="QLabel">
+                      <property name="text">
+                        <string>Camera mode:</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QComboBox" name="camera_inner_mode"></widget>
+                  </item>
+                </layout>
+              </item>
+              <item>
+                <widget class="DropArea" name="camera_inner_drop_area"></widget>
+              </item>
+            </layout>
+          </item>
+        </layout>
+      </widget>
+    </item>
+    <item>
+      <spacer>
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+    </item>
+  </layout>
+  </widget>
+  <resources />
+  <connections />
+</ui>

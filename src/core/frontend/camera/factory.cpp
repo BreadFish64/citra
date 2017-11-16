@@ -6,6 +6,7 @@
 #include "common/logging/log.h"
 #include "core/frontend/camera/blank_camera.h"
 #include "core/frontend/camera/factory.h"
+#include "core/settings.h"
 
 namespace Camera {
 
@@ -17,14 +18,15 @@ void RegisterFactory(const std::string& name, std::unique_ptr<CameraFactory> fac
     factories[name] = std::move(factory);
 }
 
-std::unique_ptr<CameraInterface> CreateCamera(const std::string& name, const std::string& config) {
-    auto pair = factories.find(name);
+std::unique_ptr<CameraInterface> CreateCamera(int camera_id) {
+    const std::string camera_name = Settings::values.camera_name[camera_id];
+    auto pair = factories.find(camera_name);
     if (pair != factories.end()) {
-        return pair->second->Create(config);
+        return pair->second->Create(camera_id);
     }
 
-    if (name != "blank") {
-        LOG_ERROR(Service_CAM, "Unknown camera \"%s\"", name.c_str());
+    if (camera_name != "blank") {
+        LOG_ERROR(Service_CAM, "Unknown camera \"%s\"", camera_name.c_str());
     }
     return std::make_unique<BlankCamera>();
 }

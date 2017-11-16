@@ -4,13 +4,15 @@
 
 #pragma once
 
+#include <QImage>
 #include "core/frontend/camera/factory.h"
 #include "core/frontend/camera/interface.h"
 
 namespace Camera {
 
-class BlankCamera final : public CameraInterface {
+class StillImageCamera final : public CameraInterface {
 public:
+    StillImageCamera(int camera_id);
     void StartCapture() override;
     void StopCapture() override;
     void SetResolution(const Service::CAM::Resolution&) override;
@@ -20,14 +22,15 @@ public:
     std::vector<u16> ReceiveFrame() const override;
 
 private:
-    int width = 0;
-    int height = 0;
-    bool output_rgb = false;
+    int camera_id;
+    int width, height;
+    bool output_rgb;
+    bool flip_horizontal, flip_vertical;
 };
 
-class BlankCameraFactory final : public CameraFactory {
+class StillImageCameraFactory final : public CameraFactory {
 public:
-    std::unique_ptr<CameraInterface> Create(int camera_id) const override;
+    std::unique_ptr<CameraInterface> Create(int _camera_id) const override;
 };
 
 } // namespace Camera

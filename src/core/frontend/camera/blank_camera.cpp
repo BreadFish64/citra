@@ -28,4 +28,8 @@ std::vector<u16> BlankCamera::ReceiveFrame() const {
     return std::vector<u16>(width * height, output_rgb ? 0 : 0x8000);
 }
 
+std::unique_ptr<CameraInterface> BlankCameraFactory::Create(int camera_id) const {
+    return std::make_unique<BlankCamera>();
+}
+
 } // namespace Camera
