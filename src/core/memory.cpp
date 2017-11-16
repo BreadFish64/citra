@@ -151,7 +151,8 @@ T Read(const VAddr vaddr) {
     PageType type = current_page_table->attributes[vaddr >> PAGE_BITS];
     switch (type) {
     case PageType::Unmapped:
-        LOG_ERROR(HW_Memory, "unmapped Read%lu @ 0x%08X", sizeof(T) * 8, vaddr);
+        LOG_ERROR(HW_Memory, "unmapped Read%lu @ 0x%08X, pc: 0x%08X", sizeof(T) * 8, vaddr,
+                  Core::CPU().GetPC());
         return 0;
     case PageType::Memory:
         ASSERT_MSG(false, "Mapped memory page without a pointer @ %08X", vaddr);
@@ -192,8 +193,8 @@ void Write(const VAddr vaddr, const T data) {
     PageType type = current_page_table->attributes[vaddr >> PAGE_BITS];
     switch (type) {
     case PageType::Unmapped:
-        LOG_ERROR(HW_Memory, "unmapped Write%lu 0x%08X @ 0x%08X", sizeof(data) * 8, (u32)data,
-                  vaddr);
+        LOG_ERROR(HW_Memory, "unmapped Write%lu 0x%08X @ 0x%08X, pc: 0x%08X", sizeof(data) * 8,
+                  (u32)data, vaddr, Core::CPU().GetPC());
         return;
     case PageType::Memory:
         ASSERT_MSG(false, "Mapped memory page without a pointer @ %08X", vaddr);
@@ -792,7 +793,7 @@ PAddr VirtualToPhysicalAddress(const VAddr addr) {
     if (!paddr) {
         LOG_ERROR(HW_Memory, "Unknown virtual address @ 0x%08X", addr);
         // To help with debugging, set bit on address so that it's obviously invalid.
-        return addr | 0x80000000;
+        return addr; // | 0x80000000;
     }
     return *paddr;
 }
