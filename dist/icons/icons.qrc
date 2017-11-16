@@ -1,7 +1,10 @@
 <RCC>
   <qresource prefix="icons">
-    <file>checked.png</file>
-    <file>failed.png</file>
     <file>citra.png</file>
+    <file>checked.png</file>
+    <file>connected.png</file>
+    <file>disconnected.png</file>
+    <file>failed.png</file>
+    <file>lock.png</file>
   </qresource>
 </RCC>

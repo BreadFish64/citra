@@ -23,8 +23,15 @@ set(SRCS
             debugger/profiler.cpp
             debugger/registers.cpp
             debugger/wait_tree.cpp
+            multiplayer/chat_room.cpp
+            multiplayer/client_room.cpp
+            multiplayer/direct_connect.cpp
+            multiplayer/host_room.cpp
+            multiplayer/lobby.cpp
+            multiplayer/message.cpp
             updater/updater.cpp
             util/spinbox.cpp
+            util/clickable_label.cpp
             util/util.cpp
             aboutdialog.cpp
             bootmanager.cpp
@@ -57,8 +64,17 @@ set(HEADERS
             debugger/profiler.h
             debugger/registers.h
             debugger/wait_tree.h
+            multiplayer/chat_room.h
+            multiplayer/client_room.h
+            multiplayer/direct_connect.h
+            multiplayer/host_room.h
+            multiplayer/lobby.h
+            multiplayer/lobby_p.h
+            multiplayer/message.h
+            multiplayer/validation.h
             updater/updater.h
             updater/updater_p.h
+            util/clickable_label.h
             util/spinbox.h
             util/util.h
             aboutdialog.h
@@ -83,6 +99,11 @@ set(UIS
             aboutdialog.ui
             hotkeys.ui
             main.ui
+            multiplayer/direct_connect.ui
+            multiplayer/lobby.ui
+            multiplayer/chat_room.ui
+            multiplayer/client_room.ui
+            multiplayer/host_room.ui
             )
 
 file(GLOB_RECURSE ICONS ${CMAKE_SOURCE_DIR}/dist/icons/*)

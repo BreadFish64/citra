@@ -92,6 +92,20 @@
     <addaction name="action_Show_Status_Bar"/>
     <addaction name="menu_View_Debugging"/>
    </widget>
+   <widget class="QMenu" name="menu_Multiplayer">
+    <property name="enabled">
+     <bool>true</bool>
+    </property>
+    <property name="title">
+     <string>Multiplayer</string>
+    </property>
+    <addaction name="action_View_Lobby"/>
+    <addaction name="action_Start_Room"/>
+    <addaction name="action_Stop_Room"/>
+    <addaction name="action_Connect_To_Room"/>
+    <addaction name="separator"/>
+    <addaction name="action_Chat"/>
+   </widget>
    <widget class="QMenu" name="menu_Help">
     <property name="title">
      <string>&amp;Help</string>
@@ -105,6 +119,7 @@
    <addaction name="menu_File"/>
    <addaction name="menu_Emulation"/>
    <addaction name="menu_View"/>
+   <addaction name="menu_Multiplayer"/>
    <addaction name="menu_Help"/>
   </widget>
   <action name="action_Load_File">
@@ -204,6 +219,43 @@
   <action name="action_Create_Pica_Surface_Viewer">
    <property name="text">
     <string>Create Pica Surface Viewer</string>
+   </property>
+  </action>
+   <action name="action_View_Lobby">
+     <property name="enabled">
+       <bool>true</bool>
+     </property>
+     <property name="text">
+       <string>Browse Public Game Lobby</string>
+     </property>
+   </action>
+   <action name="action_Start_Room">
+     <property name="enabled">
+       <bool>true</bool>
+     </property>
+     <property name="text">
+       <string>Create Room</string>
+     </property>
+   </action>
+   <action name="action_Stop_Room">
+     <property name="enabled">
+       <bool>false</bool>
+     </property>
+     <property name="text">
+       <string>Close Room</string>
+     </property>
+   </action>
+  <action name="action_Connect_To_Room">
+   <property name="text">
+    <string>Direct Connect to Room</string>
+   </property>
+  </action>
+  <action name="action_Chat">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Chat</string>
    </property>
   </action>
   <action name="action_Fullscreen">
