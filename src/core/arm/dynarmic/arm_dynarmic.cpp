@@ -5,6 +5,7 @@
 #include <cstring>
 #include <dynarmic/dynarmic.h>
 #include "common/assert.h"
+#include "common/avx_utils.h"
 #include "common/microprofile.h"
 #include "core/arm/dynarmic/arm_dynarmic.h"
 #include "core/arm/dynarmic/arm_dynarmic_cp15.h"
