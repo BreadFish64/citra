@@ -3,7 +3,6 @@
 // Refer to the license.txt file included.
 
 #include <memory>
-#include "common/param_package.h"
 #include "input_common/analog_from_button.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
@@ -71,4 +70,15 @@ std::string GenerateAnalogParamFromKeys(int key_up, int key_down, int key_left, 
     return circle_pad_param.Serialize();
 }
 
+namespace Polling {
+
+std::vector<std::unique_ptr<DevicePoller>> getPollers(DeviceType type) {
+#ifdef HAVE_SDL2
+    return SDL::Polling::getPollers(type);
+#else
+    return {};
+#endif
+}
+
+} // namespace Polling
 } // namespace InputCommon
