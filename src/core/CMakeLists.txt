@@ -1,4 +1,5 @@
 set(SRCS
+            announce_multiplayer_session.cpp
             arm/dynarmic/arm_dynarmic.cpp
             arm/dynarmic/arm_dynarmic_cp15.cpp
             arm/dyncom/arm_dyncom.cpp
@@ -192,6 +193,7 @@ set(SRCS
 
 set(HEADERS
             3ds.h
+            announce_multiplayer_session.h
             arm/arm_interface.h
             arm/dynarmic/arm_dynarmic.h
             arm/dynarmic/arm_dynarmic_cp15.h

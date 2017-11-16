@@ -44,6 +44,7 @@ set(SRCS
 
 set(HEADERS
             alignment.h
+            announce_multiplayer_room.h
             assert.h
             bit_field.h
             bit_set.h
