@@ -56,6 +56,7 @@ set(HEADERS
             common_funcs.h
             common_paths.h
             common_types.h
+            fifo_queue.h
             file_util.h
             hash.h
             linear_disk_cache.h

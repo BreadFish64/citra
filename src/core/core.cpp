@@ -57,6 +57,7 @@ System::ResultStatus System::RunLoop(int tight_loop) {
         CoreTiming::Advance();
         PrepareReschedule();
     } else {
+        CoreTiming::Advance();
         cpu_core->Run(tight_loop);
     }
 

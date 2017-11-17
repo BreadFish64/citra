@@ -27,7 +27,7 @@
 namespace Kernel {
 
 /// Event type for the thread wake up event
-static int ThreadWakeupEventType;
+static CoreTiming::EventType* ThreadWakeupEventType = nullptr;
 
 bool Thread::ShouldWait(Thread* thread) const {
     return status != THREADSTATUS_DEAD;
@@ -217,8 +217,7 @@ void Thread::WakeAfterDelay(s64 nanoseconds) {
     if (nanoseconds == -1)
         return;
 
-    u64 microseconds = nanoseconds / 1000;
-    CoreTiming::ScheduleEvent(usToCycles(microseconds), ThreadWakeupEventType, callback_handle);
+    CoreTiming::ScheduleEvent(nsToCycles(nanoseconds), ThreadWakeupEventType, callback_handle);
 }
 
 void Thread::ResumeFromWait() {
