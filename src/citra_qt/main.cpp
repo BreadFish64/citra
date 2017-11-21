@@ -43,6 +43,7 @@
 #include "core/core.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/gdbstub/gdbstub.h"
+#include "core/hle/service/am/am.h"
 #include "core/loader/loader.h"
 #include "core/settings.h"
 
@@ -338,6 +339,7 @@ void GMainWindow::ConnectWidgetEvents() {
 void GMainWindow::ConnectMenuEvents() {
     // File
     connect(ui.action_Load_File, &QAction::triggered, this, &GMainWindow::OnMenuLoadFile);
+    connect(ui.action_Install_CIA, &QAction::triggered, this, &GMainWindow::OnMenuInstallCIA);
     connect(ui.action_Select_Game_List_Root, &QAction::triggered, this,
             &GMainWindow::OnMenuSelectGameListRoot);
     connect(ui.action_Exit, &QAction::triggered, this, &QMainWindow::close);
@@ -693,6 +695,40 @@ void GMainWindow::OnMenuSelectGameListRoot() {
     if (!dir_path.isEmpty()) {
         UISettings::values.gamedir = dir_path;
         game_list->PopulateAsync(dir_path, UISettings::values.gamedir_deepscan);
+    }
+}
+
+void GMainWindow::OnMenuInstallCIA() {
+    QString file_filter = tr("3DS Installation File (*.CIA*)");
+    file_filter += ";;" + tr("All Files (*.*)");
+    QString filepath = QFileDialog::getOpenFileName(this, tr("Load File"),
+                                                    UISettings::values.roms_path, file_filter);
+    const auto cia_progress = [](size_t written, size_t total) {
+        LOG_INFO(Frontend, "%02zu%%", (written * 100 / total));
+    };
+    const Service::AM::InstallStatus install_result(
+        Service::AM::InstallCIA(filepath.toStdString(), cia_progress));
+    if (install_result != Service::AM::InstallStatus::Success) {
+        switch (install_result) {
+        case Service::AM::InstallStatus::ErrorFailedToOpenFile:
+            QMessageBox::critical(this, tr("Unable to open File"),
+                                  tr("Could not open the selected file"));
+        case Service::AM::InstallStatus::ErrorAborted:
+            QMessageBox::critical(
+                this, tr("Installation aborted"),
+                tr("The installation was aborted. Please see the log for more details"));
+        case Service::AM::InstallStatus::ErrorInvalid:
+            QMessageBox::critical(this, tr("Invalid File"),
+                                  tr("The selected file is not a valid CIA"));
+        case Service::AM::InstallStatus::ErrorEncrypted:
+            QMessageBox::critical(this, tr("Encrypted File"),
+                                  tr("The file that you are trying to install must be decrypted "
+                                     "before being used with Citra. A real 3DS is required."));
+            break;
+        }
+    } else {
+        QMessageBox::information(this, tr("CIA installed successfully"),
+                                 tr("The file %1 has been installed successfully.").arg(filepath));
     }
 }
 
