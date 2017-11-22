@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QtWidgets/qprogressbar.h>
 #include "core/core.h"
+//#include "core/hle/service/am/am.h"
 #include "ui_main.h"
 
 class Config;
@@ -128,6 +129,7 @@ private slots:
     void OnGameListOpenSaveFolder(u64 program_id);
     void OnMenuLoadFile();
     void OnMenuInstallCIA();
+    void OnCIAInstallFinished();
     /// Called whenever a user selects the "File->Select Game List Root" menu item
     void OnMenuSelectGameListRoot();
     void OnMenuRecentFile();

@@ -11,6 +11,7 @@
 #include <QDesktopWidget>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QtGui>
 #include <QtWidgets>
 #include "citra_qt/aboutdialog.h"
@@ -369,6 +370,7 @@ void GMainWindow::ConnectMenuEvents() {
             &GMainWindow::OnCheckForUpdates);
     connect(ui.action_Open_Maintenance_Tool, &QAction::triggered, this,
             &GMainWindow::OnOpenUpdater);
+    connect(watcher, &QFutureWatcher<void>::finished, this, &GMainWindow::OnMenuInstallCIA);
 }
 
 void GMainWindow::OnDisplayTitleBars(bool show) {
@@ -706,17 +708,25 @@ void GMainWindow::OnMenuInstallCIA() {
         return;
     progress_bar = new QProgressBar();
     this->statusBar()->addWidget(progress_bar);
-    const auto cia_progress = [this](size_t written, size_t total) {
-        progress_bar->setMaximum(total);
-        progress_bar->setValue(written);
-    };
-    const Service::AM::InstallStatus install_result(
-        Service::AM::InstallCIA(filepath.toStdString(), cia_progress));
+    watcher = new QFutureWatcher<void>;
+
+    QFuture<void> f = QtConcurrent::run([&, filepath] {
+        const auto cia_progress = [&](size_t written, size_t total) {
+            progress_bar->setMaximum(total);
+            progress_bar->setValue(written);
+        };
+        Service::AM::InstallCIA(filepath.toStdString());
+    });
+    watcher->setFuture(f);
+}
+
+void GMainWindow::OnCIAInstallFinished() {
+    LOG_ERROR(Frontend, "bleep bloop");
     this->statusBar()->removeWidget(progress_bar);
-    switch (install_result) {
+
+    /*switch (watcher) {
     case Service::AM::InstallStatus::Success:
-        this->statusBar()->showMessage(
-            tr("The file %1 has been installed successfully.").arg(filepath));
+        this->statusBar()->showMessage(tr("The file has been installed successfully."));
         break;
     case Service::AM::InstallStatus::ErrorFailedToOpenFile:
         QMessageBox::critical(this, tr("Unable to open File"),
@@ -735,7 +745,7 @@ void GMainWindow::OnMenuInstallCIA() {
                               tr("The file that you are trying to install must be decrypted "
                                  "before being used with Citra. A real 3DS is required."));
         break;
-    }
+}*/
 }
 
 void GMainWindow::OnMenuRecentFile() {
