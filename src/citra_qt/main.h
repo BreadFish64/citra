@@ -5,8 +5,10 @@
 #pragma once
 
 #include <memory>
+#include <QFutureWatcher>
 #include <QMainWindow>
 #include <QTimer>
+#include <QtWidgets/qprogressbar.h>
 #include "core/core.h"
 #include "ui_main.h"
 
@@ -150,8 +152,10 @@ private:
 
     GRenderWindow* render_window;
     GameList* game_list;
+    QFutureWatcher<void>* watcher = nullptr;
 
     // Status bar elements
+    QProgressBar* progress_bar = nullptr;
     QLabel* message_label = nullptr;
     QLabel* emu_speed_label = nullptr;
     QLabel* game_fps_label = nullptr;
