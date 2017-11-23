@@ -67,7 +67,7 @@ signals:
      * system emulation handles and memory are still valid, but are about become invalid.
      */
     void EmulationStopping();
-    void updateProgress(size_t written, size_t total);
+    void UpdateProgress(size_t written, size_t total);
 
 private:
     void InitializeWidgets();

@@ -708,17 +708,13 @@ void GMainWindow::OnMenuInstallCIA() {
 
     connect(watcher, &QFutureWatcher<Service::AM::InstallStatus>::finished, this,
             &GMainWindow::OnMenuInstallCIA);
-    // connect(thread, &GMainWindow::updateProgress, this, &GMainWindow::OnUpdateProgress);
+    connect(this, &GMainWindow::UpdateProgress, this, &GMainWindow::OnUpdateProgress);
     watcher = new QFutureWatcher<Service::AM::InstallStatus>;
     progress_bar = new QProgressBar();
     this->statusBar()->addWidget(progress_bar);
-    /*const auto cia_progress = [&](size_t written, size_t total) {
-        progress_bar->setMaximum(total);
-        progress_bar->setValue(written);
-    };*/
     QFuture<Service::AM::InstallStatus> f = QtConcurrent::run([&, filepath] {
         const auto cia_progress = [&](size_t written, size_t total) {
-            updateProgress(written, total);
+            emit UpdateProgress(written, total);
         };
         return Service::AM::InstallCIA(filepath.toStdString(), cia_progress);
     });
@@ -728,6 +724,7 @@ void GMainWindow::OnMenuInstallCIA() {
 void GMainWindow::OnUpdateProgress(size_t written, size_t total) {
     progress_bar->setMaximum(total);
     progress_bar->setValue(written);
+    LOG_ERROR(Frontend, "electric boogaloo");
 }
 
 void GMainWindow::OnCIAInstallFinished() {
