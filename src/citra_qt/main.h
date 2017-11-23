@@ -10,7 +10,7 @@
 #include <QTimer>
 #include <QtWidgets/qprogressbar.h>
 #include "core/core.h"
-//#include "core/hle/service/am/am.h"
+#include "core/hle/service/am/am.h"
 #include "ui_main.h"
 
 class Config;
@@ -67,6 +67,7 @@ signals:
      * system emulation handles and memory are still valid, but are about become invalid.
      */
     void EmulationStopping();
+    void updateProgress(size_t written, size_t total);
 
 private:
     void InitializeWidgets();
@@ -146,6 +147,7 @@ private slots:
     void OnUpdateFound(bool found, bool error);
     void OnCheckForUpdates();
     void OnOpenUpdater();
+    void OnUpdateProgress(size_t written, size_t total);
 
 private:
     void UpdateStatusBar();
@@ -154,9 +156,10 @@ private:
 
     GRenderWindow* render_window;
     GameList* game_list;
-    QFutureWatcher<void>* watcher = nullptr;
+    QFutureWatcher<Service::AM::InstallStatus>* watcher = nullptr;
 
     // Status bar elements
+
     QProgressBar* progress_bar = nullptr;
     QLabel* message_label = nullptr;
     QLabel* emu_speed_label = nullptr;

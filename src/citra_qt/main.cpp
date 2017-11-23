@@ -370,7 +370,6 @@ void GMainWindow::ConnectMenuEvents() {
             &GMainWindow::OnCheckForUpdates);
     connect(ui.action_Open_Maintenance_Tool, &QAction::triggered, this,
             &GMainWindow::OnOpenUpdater);
-    connect(watcher, &QFutureWatcher<void>::finished, this, &GMainWindow::OnMenuInstallCIA);
 }
 
 void GMainWindow::OnDisplayTitleBars(bool show) {
@@ -706,25 +705,35 @@ void GMainWindow::OnMenuInstallCIA() {
         tr("3DS Installation File (*.CIA*)") + ";;" + tr("All Files (*.*)"));
     if (filepath.isEmpty())
         return;
+
+    connect(watcher, &QFutureWatcher<Service::AM::InstallStatus>::finished, this,
+            &GMainWindow::OnMenuInstallCIA);
+    // connect(thread, &GMainWindow::updateProgress, this, &GMainWindow::OnUpdateProgress);
+    watcher = new QFutureWatcher<Service::AM::InstallStatus>;
     progress_bar = new QProgressBar();
     this->statusBar()->addWidget(progress_bar);
-    watcher = new QFutureWatcher<void>;
-
-    QFuture<void> f = QtConcurrent::run([&, filepath] {
+    /*const auto cia_progress = [&](size_t written, size_t total) {
+        progress_bar->setMaximum(total);
+        progress_bar->setValue(written);
+    };*/
+    QFuture<Service::AM::InstallStatus> f = QtConcurrent::run([&, filepath] {
         const auto cia_progress = [&](size_t written, size_t total) {
-            progress_bar->setMaximum(total);
-            progress_bar->setValue(written);
+            updateProgress(written, total);
         };
-        Service::AM::InstallCIA(filepath.toStdString());
+        return Service::AM::InstallCIA(filepath.toStdString(), cia_progress);
     });
     watcher->setFuture(f);
+}
+
+void GMainWindow::OnUpdateProgress(size_t written, size_t total) {
+    progress_bar->setMaximum(total);
+    progress_bar->setValue(written);
 }
 
 void GMainWindow::OnCIAInstallFinished() {
     LOG_ERROR(Frontend, "bleep bloop");
     this->statusBar()->removeWidget(progress_bar);
-
-    /*switch (watcher) {
+    switch (watcher->future()) {
     case Service::AM::InstallStatus::Success:
         this->statusBar()->showMessage(tr("The file has been installed successfully."));
         break;
@@ -745,7 +754,7 @@ void GMainWindow::OnCIAInstallFinished() {
                               tr("The file that you are trying to install must be decrypted "
                                  "before being used with Citra. A real 3DS is required."));
         break;
-}*/
+    }
 }
 
 void GMainWindow::OnMenuRecentFile() {
