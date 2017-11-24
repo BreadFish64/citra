@@ -7,6 +7,7 @@
 #include <memory>
 #include <QFutureWatcher>
 #include <QMainWindow>
+#include <QMetaType>
 #include <QTimer>
 #include <QtWidgets/qprogressbar.h>
 #include "core/core.h"
@@ -30,12 +31,14 @@ class Updater;
 class WaitTreeWidget;
 class AboutDialog;
 
+Q_DECLARE_METATYPE(size_t);
+
 class GMainWindow : public QMainWindow {
     Q_OBJECT
 
     /// Max number of recently loaded items to keep track of
     static const int max_recent_files_item = 10;
-
+    qRegisterMetaType<size_t>();
     // TODO: Make use of this!
     enum {
         UI_IDLE,

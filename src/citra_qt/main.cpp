@@ -706,8 +706,6 @@ void GMainWindow::OnMenuInstallCIA() {
     if (filepath.isEmpty())
         return;
 
-    connect(watcher, &QFutureWatcher<Service::AM::InstallStatus>::finished, this,
-            &GMainWindow::OnMenuInstallCIA);
     connect(this, &GMainWindow::UpdateProgress, this, &GMainWindow::OnUpdateProgress);
     watcher = new QFutureWatcher<Service::AM::InstallStatus>;
     progress_bar = new QProgressBar();
@@ -718,6 +716,8 @@ void GMainWindow::OnMenuInstallCIA() {
         };
         return Service::AM::InstallCIA(filepath.toStdString(), cia_progress);
     });
+    connect(watcher, &QFutureWatcher<Service::AM::InstallStatus>::finished, this,
+            &GMainWindow::OnCIAInstallFinished);
     watcher->setFuture(f);
 }
 
