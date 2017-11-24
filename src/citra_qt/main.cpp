@@ -94,6 +94,9 @@ void GMainWindow::ShowCallouts() {
 }
 
 GMainWindow::GMainWindow() : config(new Config()), emu_thread(nullptr) {
+    // register size_t to use in slots and signals
+    qRegisterMetaType<size_t>("size_t");
+
     Pica::g_debug_context = Pica::DebugContext::Construct();
     setAcceptDrops(true);
     ui.setupUi(this);
@@ -706,10 +709,14 @@ void GMainWindow::OnMenuInstallCIA() {
     if (filepath.isEmpty())
         return;
 
+    ui.action_Install_CIA->setEnabled(false);
+
+    // update progress
     connect(this, &GMainWindow::UpdateProgress, this, &GMainWindow::OnUpdateProgress);
     watcher = new QFutureWatcher<Service::AM::InstallStatus>;
     progress_bar = new QProgressBar();
     this->statusBar()->addWidget(progress_bar);
+
     QFuture<Service::AM::InstallStatus> f = QtConcurrent::run([&, filepath] {
         const auto cia_progress = [&](size_t written, size_t total) {
             emit UpdateProgress(written, total);
@@ -724,11 +731,9 @@ void GMainWindow::OnMenuInstallCIA() {
 void GMainWindow::OnUpdateProgress(size_t written, size_t total) {
     progress_bar->setMaximum(total);
     progress_bar->setValue(written);
-    LOG_ERROR(Frontend, "electric boogaloo");
 }
 
 void GMainWindow::OnCIAInstallFinished() {
-    LOG_ERROR(Frontend, "bleep bloop");
     this->statusBar()->removeWidget(progress_bar);
     switch (watcher->future()) {
     case Service::AM::InstallStatus::Success:
@@ -752,6 +757,7 @@ void GMainWindow::OnCIAInstallFinished() {
                                  "before being used with Citra. A real 3DS is required."));
         break;
     }
+    ui.action_Install_CIA->setEnabled(true);
 }
 
 void GMainWindow::OnMenuRecentFile() {

@@ -7,7 +7,6 @@
 #include <memory>
 #include <QFutureWatcher>
 #include <QMainWindow>
-#include <QMetaType>
 #include <QTimer>
 #include <QtWidgets/qprogressbar.h>
 #include "core/core.h"
@@ -31,14 +30,12 @@ class Updater;
 class WaitTreeWidget;
 class AboutDialog;
 
-Q_DECLARE_METATYPE(size_t);
-
 class GMainWindow : public QMainWindow {
     Q_OBJECT
 
     /// Max number of recently loaded items to keep track of
     static const int max_recent_files_item = 10;
-    qRegisterMetaType<size_t>();
+
     // TODO: Make use of this!
     enum {
         UI_IDLE,
@@ -133,6 +130,7 @@ private slots:
     void OnGameListOpenSaveFolder(u64 program_id);
     void OnMenuLoadFile();
     void OnMenuInstallCIA();
+    void OnUpdateProgress(size_t written, size_t total);
     void OnCIAInstallFinished();
     /// Called whenever a user selects the "File->Select Game List Root" menu item
     void OnMenuSelectGameListRoot();
@@ -150,7 +148,6 @@ private slots:
     void OnUpdateFound(bool found, bool error);
     void OnCheckForUpdates();
     void OnOpenUpdater();
-    void OnUpdateProgress(size_t written, size_t total);
 
 private:
     void UpdateStatusBar();
@@ -198,3 +195,5 @@ protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
 };
+
+Q_DECLARE_METATYPE(size_t);
