@@ -11,6 +11,7 @@
 #include <QDesktopWidget>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QtGui>
 #include <QtWidgets>
 #include "citra_qt/aboutdialog.h"
@@ -43,6 +44,7 @@
 #include "core/core.h"
 #include "core/file_sys/archive_source_sd_savedata.h"
 #include "core/gdbstub/gdbstub.h"
+#include "core/hle/service/am/am.h"
 #include "core/loader/loader.h"
 #include "core/settings.h"
 
@@ -92,6 +94,9 @@ void GMainWindow::ShowCallouts() {
 }
 
 GMainWindow::GMainWindow() : config(new Config()), emu_thread(nullptr) {
+    // register size_t to use in slots and signals
+    qRegisterMetaType<size_t>("size_t");
+
     Pica::g_debug_context = Pica::DebugContext::Construct();
     setAcceptDrops(true);
     ui.setupUi(this);
@@ -338,6 +343,7 @@ void GMainWindow::ConnectWidgetEvents() {
 void GMainWindow::ConnectMenuEvents() {
     // File
     connect(ui.action_Load_File, &QAction::triggered, this, &GMainWindow::OnMenuLoadFile);
+    connect(ui.action_Install_CIA, &QAction::triggered, this, &GMainWindow::OnMenuInstallCIA);
     connect(ui.action_Select_Game_List_Root, &QAction::triggered, this,
             &GMainWindow::OnMenuSelectGameListRoot);
     connect(ui.action_Exit, &QAction::triggered, this, &QMainWindow::close);
@@ -696,6 +702,64 @@ void GMainWindow::OnMenuSelectGameListRoot() {
     }
 }
 
+void GMainWindow::OnMenuInstallCIA() {
+    QString filepath = QFileDialog::getOpenFileName(
+        this, tr("Load File"), UISettings::values.roms_path,
+        tr("3DS Installation File (*.CIA*)") + ";;" + tr("All Files (*.*)"));
+    if (filepath.isEmpty())
+        return;
+
+    ui.action_Install_CIA->setEnabled(false);
+
+    // update progress
+    connect(this, &GMainWindow::UpdateProgress, this, &GMainWindow::OnUpdateProgress);
+    watcher = new QFutureWatcher<Service::AM::InstallStatus>;
+    progress_bar = new QProgressBar();
+    this->statusBar()->addWidget(progress_bar);
+
+    QFuture<Service::AM::InstallStatus> f = QtConcurrent::run([&, filepath] {
+        const auto cia_progress = [&](size_t written, size_t total) {
+            emit UpdateProgress(written, total);
+        };
+        return Service::AM::InstallCIA(filepath.toStdString(), cia_progress);
+    });
+    connect(watcher, &QFutureWatcher<Service::AM::InstallStatus>::finished, this,
+            &GMainWindow::OnCIAInstallFinished);
+    watcher->setFuture(f);
+}
+
+void GMainWindow::OnUpdateProgress(size_t written, size_t total) {
+    progress_bar->setMaximum(total);
+    progress_bar->setValue(written);
+}
+
+void GMainWindow::OnCIAInstallFinished() {
+    this->statusBar()->removeWidget(progress_bar);
+    switch (watcher->future()) {
+    case Service::AM::InstallStatus::Success:
+        this->statusBar()->showMessage(tr("The file has been installed successfully."));
+        break;
+    case Service::AM::InstallStatus::ErrorFailedToOpenFile:
+        QMessageBox::critical(this, tr("Unable to open File"),
+                              tr("Could not open the selected file"));
+        break;
+    case Service::AM::InstallStatus::ErrorAborted:
+        QMessageBox::critical(
+            this, tr("Installation aborted"),
+            tr("The installation was aborted. Please see the log for more details"));
+        break;
+    case Service::AM::InstallStatus::ErrorInvalid:
+        QMessageBox::critical(this, tr("Invalid File"), tr("The selected file is not a valid CIA"));
+        break;
+    case Service::AM::InstallStatus::ErrorEncrypted:
+        QMessageBox::critical(this, tr("Encrypted File"),
+                              tr("The file that you are trying to install must be decrypted "
+                                 "before being used with Citra. A real 3DS is required."));
+        break;
+    }
+    ui.action_Install_CIA->setEnabled(true);
+}
+
 void GMainWindow::OnMenuRecentFile() {
     QAction* action = qobject_cast<QAction*>(sender());
     assert(action);
@@ -878,9 +942,12 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
             this, tr("Fatal Error"),
             tr("Citra has encountered a fatal error, please see the log for more details. "
                "For more information on accessing the log, please see the following page: "
-               "<a href='https://community.citra-emu.org/t/how-to-upload-the-log-file/296'>How to "
-               "Upload the Log File</a>.<br/><br/>Would you like to quit back to the game list? "
-               "Continuing emulation may result in crashes, corrupted save data, or other bugs."),
+               "<a href='https://community.citra-emu.org/t/how-to-upload-the-log-file/296'>How "
+               "to "
+               "Upload the Log File</a>.<br/><br/>Would you like to quit back to the game "
+               "list? "
+               "Continuing emulation may result in crashes, corrupted save data, or other "
+               "bugs."),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         status_message = "Fatal Error encountered";
         break;
