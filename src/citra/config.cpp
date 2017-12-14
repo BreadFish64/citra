@@ -159,7 +159,7 @@ void Config::ReadValues() {
 
     // Web Service
     Settings::values.enable_telemetry =
-        sdl2_config->GetBoolean("WebService", "enable_telemetry", true);
+        sdl2_config->GetBoolean("WebService", "enable_telemetry", false);
     Settings::values.telemetry_endpoint_url = sdl2_config->Get(
         "WebService", "telemetry_endpoint_url", "https://services.citra-emu.org/api/telemetry");
     Settings::values.verify_endpoint_url = sdl2_config->Get(
