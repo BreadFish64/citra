@@ -4,17 +4,27 @@
 
 #include <QApplication>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QKeyEvent>
+#include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
+#include <QModelIndex>
+#include <QStandardItem>
+#include <QStandardItemModel>
 #include <QThreadPool>
+#include <QToolButton>
+#include <QTreeView>
+#include "citra_qt/game_list.h"
+#include "citra_qt/game_list_p.h"
+#include "citra_qt/main.h"
+#include "citra_qt/ui_settings.h"
 #include "common/common_paths.h"
 #include "common/logging/log.h"
 #include "common/string_util.h"
 #include "core/loader/loader.h"
-#include "game_list.h"
-#include "game_list_p.h"
-#include "ui_settings.h"
 
 GameList::SearchField::KeyReleaseEater::KeyReleaseEater(GameList* gamelist) {
     this->gamelist = gamelist;
@@ -114,8 +124,7 @@ GameList::SearchField::SearchField(GameList* parent) : QWidget{parent} {
     edit_filter->setPlaceholderText(tr("Enter pattern to filter"));
     edit_filter->installEventFilter(keyReleaseEater);
     edit_filter->setClearButtonEnabled(true);
-    connect(edit_filter, SIGNAL(textChanged(const QString&)), parent,
-            SLOT(onTextChanged(const QString&)));
+    connect(edit_filter, &QLineEdit::textChanged, parent, &GameList::onTextChanged);
     label_filter_result = new QLabel;
     button_filter_close = new QToolButton(this);
     button_filter_close->setText("X");
@@ -124,7 +133,7 @@ GameList::SearchField::SearchField(GameList* parent) : QWidget{parent} {
                                        "#000000; font-weight: bold; background: #F0F0F0; }"
                                        "QToolButton:hover{ border: none; padding: 0px; color: "
                                        "#EEEEEE; font-weight: bold; background: #E81123}");
-    connect(button_filter_close, SIGNAL(clicked()), parent, SLOT(onFilterCloseClicked()));
+    connect(button_filter_close, &QToolButton::clicked, parent, &GameList::onFilterCloseClicked);
     layout_filter->setSpacing(10);
     layout_filter->addWidget(label_filter);
     layout_filter->addWidget(edit_filter);

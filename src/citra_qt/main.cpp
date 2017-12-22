@@ -17,6 +17,7 @@
 #include <QtWidgets>
 #include "citra_qt/aboutdialog.h"
 #include "citra_qt/bootmanager.h"
+#include "citra_qt/compatdb.h"
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/configuration/configure_dialog.h"
 #include "citra_qt/debugger/graphics/graphics.h"
@@ -252,7 +253,7 @@ void GMainWindow::InitializeRecentFileMenuActions() {
     for (int i = 0; i < max_recent_files_item; ++i) {
         actions_recent_files[i] = new QAction(this);
         actions_recent_files[i]->setVisible(false);
-        connect(actions_recent_files[i], SIGNAL(triggered()), this, SLOT(OnMenuRecentFile()));
+        connect(actions_recent_files[i], &QAction::triggered, this, &GMainWindow::OnMenuRecentFile);
 
         ui.menu_recent_files->addAction(actions_recent_files[i]);
     }
@@ -269,12 +270,12 @@ void GMainWindow::InitializeHotkeys() {
                    Qt::ApplicationShortcut);
     LoadHotkeys();
 
-    connect(GetHotkey("Main Window", "Load File", this), SIGNAL(activated()), this,
-            SLOT(OnMenuLoadFile()));
-    connect(GetHotkey("Main Window", "Start Emulation", this), SIGNAL(activated()), this,
-            SLOT(OnStartGame()));
-    connect(GetHotkey("Main Window", "Swap Screens", render_window), SIGNAL(activated()), this,
-            SLOT(OnSwapScreens()));
+    connect(GetHotkey("Main Window", "Load File", this), &QShortcut::activated, this,
+            &GMainWindow::OnMenuLoadFile);
+    connect(GetHotkey("Main Window", "Start Emulation", this), &QShortcut::activated, this,
+            &GMainWindow::OnStartGame);
+    connect(GetHotkey("Main Window", "Swap Screens", render_window), &QShortcut::activated, this,
+            &GMainWindow::OnSwapScreens);
     connect(GetHotkey("Main Window", "Fullscreen", render_window), &QShortcut::activated,
             ui.action_Fullscreen, &QAction::trigger);
     connect(GetHotkey("Main Window", "Fullscreen", render_window), &QShortcut::activatedAmbiguously,
@@ -333,13 +334,14 @@ void GMainWindow::RestoreUIState() {
 }
 
 void GMainWindow::ConnectWidgetEvents() {
-    connect(game_list, SIGNAL(GameChosen(QString)), this, SLOT(OnGameListLoadFile(QString)));
-    connect(game_list, SIGNAL(OpenSaveFolderRequested(u64)), this,
-            SLOT(OnGameListOpenSaveFolder(u64)));
+    connect(game_list, &GameList::GameChosen, this, &GMainWindow::OnGameListLoadFile);
+    connect(game_list, &GameList::OpenSaveFolderRequested, this,
+            &GMainWindow::OnGameListOpenSaveFolder);
 
-    connect(this, SIGNAL(EmulationStarting(EmuThread*)), render_window,
-            SLOT(OnEmulationStarting(EmuThread*)));
-    connect(this, SIGNAL(EmulationStopping()), render_window, SLOT(OnEmulationStopping()));
+    connect(this, &GMainWindow::EmulationStarting, render_window,
+            &GRenderWindow::OnEmulationStarting);
+    connect(this, &GMainWindow::EmulationStopping, render_window,
+            &GRenderWindow::OnEmulationStopping);
 
     connect(&status_bar_update_timer, &QTimer::timeout, this, &GMainWindow::UpdateStatusBar);
 
@@ -352,6 +354,8 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui.action_Install_CIA, &QAction::triggered, this, &GMainWindow::OnMenuInstallCIA);
     connect(ui.action_Select_Game_List_Root, &QAction::triggered, this,
             &GMainWindow::OnMenuSelectGameListRoot);
+    connect(ui.action_Report_Compatibility, &QAction::triggered, this,
+            &GMainWindow::OnMenuReportCompatibility);
     connect(ui.action_Exit, &QAction::triggered, this, &QMainWindow::close);
 
     // Emulation
@@ -560,19 +564,21 @@ void GMainWindow::BootGame(const QString& filename) {
     render_window->moveContext();
     emu_thread->start();
 
-    connect(render_window, SIGNAL(Closed()), this, SLOT(OnStopGame()));
+    connect(render_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);
     // BlockingQueuedConnection is important here, it makes sure we've finished refreshing our views
     // before the CPU continues
-    connect(emu_thread.get(), SIGNAL(DebugModeEntered()), registersWidget,
-            SLOT(OnDebugModeEntered()), Qt::BlockingQueuedConnection);
-    connect(emu_thread.get(), SIGNAL(DebugModeEntered()), waitTreeWidget,
-            SLOT(OnDebugModeEntered()), Qt::BlockingQueuedConnection);
-    connect(emu_thread.get(), SIGNAL(DebugModeLeft()), registersWidget, SLOT(OnDebugModeLeft()),
-            Qt::BlockingQueuedConnection);
-    connect(emu_thread.get(), SIGNAL(DebugModeLeft()), waitTreeWidget, SLOT(OnDebugModeLeft()),
-            Qt::BlockingQueuedConnection);
+    connect(emu_thread.get(), &EmuThread::DebugModeEntered, registersWidget,
+            &RegistersWidget::OnDebugModeEntered, Qt::BlockingQueuedConnection);
+    connect(emu_thread.get(), &EmuThread::DebugModeEntered, waitTreeWidget,
+            &WaitTreeWidget::OnDebugModeEntered, Qt::BlockingQueuedConnection);
+    connect(emu_thread.get(), &EmuThread::DebugModeLeft, registersWidget,
+            &RegistersWidget::OnDebugModeLeft, Qt::BlockingQueuedConnection);
+    connect(emu_thread.get(), &EmuThread::DebugModeLeft, waitTreeWidget,
+            &WaitTreeWidget::OnDebugModeLeft, Qt::BlockingQueuedConnection);
 
     // Update the GUI
+    ui.action_Report_Compatibility->setEnabled(true);
+
     registersWidget->OnDebugModeEntered();
     if (ui.action_Single_Window_Mode->isChecked()) {
         game_list->hide();
@@ -606,13 +612,14 @@ void GMainWindow::ShutdownGame() {
     emu_thread = nullptr;
 
     // The emulation is stopped, so closing the window or not does not matter anymore
-    disconnect(render_window, SIGNAL(Closed()), this, SLOT(OnStopGame()));
+    disconnect(render_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);
 
     // Update the GUI
     ui.action_Start->setEnabled(false);
     ui.action_Start->setText(tr("Start"));
     ui.action_Pause->setEnabled(false);
     ui.action_Stop->setEnabled(false);
+    ui.action_Report_Compatibility->setEnabled(false);
     render_window->hide();
     game_list->show();
     game_list->setFilterFocus();
@@ -636,9 +643,9 @@ void GMainWindow::StoreRecentFile(const QString& filename) {
     UISettings::values.recent_files.removeDuplicates();
     while (UISettings::values.recent_files.size() > max_recent_files_item) {
         UISettings::values.recent_files.removeLast();
-    }
 
-    UpdateRecentFiles();
+        UpdateRecentFiles();
+    }
 }
 
 void GMainWindow::UpdateRecentFiles() {
@@ -783,12 +790,16 @@ void GMainWindow::OnMenuRecentFile() {
     }
 }
 
+void GMainWindow::OnMenuReportCompatibility() {
+    CompatDB compatdb{this};
+    compatdb.exec();
+};
+
 void GMainWindow::OnStartGame() {
     emu_thread->SetRunning(true);
     qRegisterMetaType<Core::System::ResultStatus>("Core::System::ResultStatus");
     qRegisterMetaType<std::string>("std::string");
-    connect(emu_thread.get(), SIGNAL(ErrorThrown(Core::System::ResultStatus, std::string)), this,
-            SLOT(OnCoreError(Core::System::ResultStatus, std::string)));
+    connect(emu_thread.get(), &EmuThread::ErrorThrown, this, &GMainWindow::OnCoreError);
 
     ui.action_Start->setEnabled(false);
     ui.action_Start->setText(tr("Continue"));
@@ -959,9 +970,12 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
             this, tr("Fatal Error"),
             tr("Citra has encountered a fatal error, please see the log for more details. "
                "For more information on accessing the log, please see the following page: "
-               "<a href='https://community.citra-emu.org/t/how-to-upload-the-log-file/296'>How to "
-               "Upload the Log File</a>.<br/><br/>Would you like to quit back to the game list? "
-               "Continuing emulation may result in crashes, corrupted save data, or other bugs."),
+               "<a href='https://community.citra-emu.org/t/how-to-upload-the-log-file/296'>How "
+               "to "
+               "Upload the Log File</a>.<br/><br/>Would you like to quit back to the game "
+               "list? "
+               "Continuing emulation may result in crashes, corrupted save data, or other "
+               "bugs."),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
         status_message = "Fatal Error encountered";
         break;
