@@ -7,6 +7,7 @@
 
 #include "common/assert.h"
 #include "common/file_util.h"
+#include "common/os_version_detect.h"
 #include "common/scm_rev.h"
 #include "common/x64/cpu_detect.h"
 #include "core/core.h"
@@ -146,7 +147,7 @@ TelemetrySession::TelemetrySession() {
 #ifdef __APPLE__
     AddField(Telemetry::FieldType::UserSystem, "OsPlatform", "Apple");
 #elif defined(_WIN32)
-    AddField(Telemetry::FieldType::UserSystem, "OsPlatform", "Windows");
+    AddField(Telemetry::FieldType::UserSystem, "OsPlatform", Common::WinVersiontoStr());
 #elif defined(__linux__) || defined(linux) || defined(__linux)
     AddField(Telemetry::FieldType::UserSystem, "OsPlatform", "Linux");
 #else

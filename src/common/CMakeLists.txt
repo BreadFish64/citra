@@ -56,6 +56,8 @@ add_library(common STATIC
     microprofile.h
     microprofileui.h
     misc.cpp
+    os_version_detect.cpp
+    os_version_detect.h
     param_package.cpp
     param_package.h
     platform.h
