@@ -62,6 +62,9 @@ if (ARCHITECTURE_x86_64)
     target_compile_definitions(xbyak INTERFACE XBYAK_NO_OP_NAMES)
 endif()
 
+# xBRZ
+add_subdirectory(xbrz)
+
 # ENet
 add_subdirectory(enet)
 target_include_directories(enet INTERFACE ./enet/include)

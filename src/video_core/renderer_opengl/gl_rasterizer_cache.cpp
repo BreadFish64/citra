@@ -6,14 +6,17 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <future>
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 #include <boost/range/iterator_range.hpp>
 #include <glad/glad.h>
+#include <xbrz/xbrz.h>
 #include "common/alignment.h"
 #include "common/bit_field.h"
 #include "common/color.h"
@@ -69,7 +72,7 @@ static constexpr std::array<FormatTuple, 4> depth_format_tuples = {{
     {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8}, // D24S8
 }};
 
-static constexpr FormatTuple tex_tuple = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
+static constexpr FormatTuple tex_tuple = {GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE};
 
 static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
     const SurfaceType type = SurfaceParams::GetFormatType(pixel_format);
@@ -795,7 +798,10 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
                     auto vec4 =
                         Pica::Texture::LookupTexture(texture_src_data, x, height - 1 - y, tex_info);
                     const std::size_t offset = (x + (width * y)) * 4;
-                    std::memcpy(&gl_buffer[offset], vec4.AsArray(), 4);
+                    gl_buffer[offset] = vec4.b();
+                    gl_buffer[offset + 1] = vec4.g();
+                    gl_buffer[offset + 2] = vec4.r();
+                    gl_buffer[offset + 3] = vec4.a();
                 }
             }
         } else {
@@ -1469,6 +1475,100 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
         }
     }
 
+    constexpr bool TEX_UPSCALING_ENABLE = true;
+    constexpr u16 TEX_UPSCALING_MAX_FACTOR = 6;
+
+    if (TEX_UPSCALING_ENABLE && surface->res_scale == 1) {
+        const size_t scale_factor =
+            std::min({ TEX_UPSCALING_MAX_FACTOR});
+        if (scale_factor == 1) {
+            return surface;
+        }
+
+        SurfaceParams upscale_params = params;
+        upscale_params.res_scale = static_cast<u16>(scale_factor);
+
+        Surface upscaled_surface = CreateSurface(upscale_params);
+        upscaled_surface->invalid_regions.clear();
+        RegisterSurface(upscaled_surface);
+        remove_surfaces.emplace(surface);
+
+        OpenGLState state = OpenGLState::GetCurState();
+        OpenGLState prev_state = state;
+        SCOPE_EXIT({ prev_state.Apply(); });
+
+        // xbrz::scale expects 32bit aligment
+        const u32* src_buf = nullptr;
+        GLuint dest_tex = 0;
+
+        OGLTexture tmp_tex;
+        std::unique_ptr<u32[]> tmp_buf;
+        if (upscale_params.type != SurfaceType::Texture) {
+            // Convert to BGRA, download, allocate output texture
+            tmp_tex.Create();
+            AllocateSurfaceTexture(tmp_tex.handle, tex_tuple, upscale_params.width,
+                                   upscale_params.height);
+            BlitTextures(surface->texture.handle, upscale_params.GetRect(), tmp_tex.handle,
+                         upscale_params.GetRect(), SurfaceType::Texture, read_framebuffer.handle,
+                         draw_framebuffer.handle);
+
+            state.texture_units[0].texture_2d = tmp_tex.handle;
+            state.Apply();
+
+            glActiveTexture(GL_TEXTURE0);
+            tmp_buf.reset(new u32[upscale_params.width * upscale_params.height]);
+            glGetTexImage(GL_TEXTURE_2D, 0, tex_tuple.format, tex_tuple.type, &tmp_buf[0]);
+            src_buf = &tmp_buf[0];
+
+            tmp_tex.Release();
+            tmp_tex.Create();
+            AllocateSurfaceTexture(tmp_tex.handle, tex_tuple, upscale_params.GetScaledWidth(),
+                                   upscale_params.GetScaledHeight());
+            dest_tex = tmp_tex.handle;
+        } else {
+            src_buf = reinterpret_cast<u32*>(&surface->gl_buffer[0]);
+            dest_tex = upscaled_surface->texture.handle;
+        }
+
+        auto xbrzFormat = (upscale_params.pixel_format == PixelFormat::RGB8 ||
+                           upscale_params.pixel_format == PixelFormat::RGB565)
+                              ? xbrz::ColorFormat::RGB
+                              : xbrz::ColorFormat::ARGB;
+
+        std::unique_ptr<u32[]> upscaled_buf(
+            new u32[upscale_params.GetScaledWidth() * upscale_params.GetScaledHeight()]);
+
+        u32 rows_per_thread =
+            std::max(((upscale_params.height - 1) / std::thread::hardware_concurrency()) + 1, 16u);
+        std::vector<std::future<void>> futures;
+
+        for (u32 y = 0; y < upscale_params.height; y += rows_per_thread) {
+            futures.emplace_back(std::async([&, y] {
+                xbrz::scale(scale_factor, src_buf, upscaled_buf.get(), upscale_params.width,
+                            upscale_params.height, xbrzFormat, xbrz::ScalerCfg{}, y,
+                            std::min(y + rows_per_thread, upscale_params.height));
+            }));
+        }
+        for (auto& future : futures) {
+            future.get();
+        }
+
+        state.texture_units[0].texture_2d = dest_tex;
+        state.Apply();
+
+        glActiveTexture(GL_TEXTURE0);
+        glTexImage2D(GL_TEXTURE_2D, 0, tex_tuple.internal_format, upscale_params.GetScaledWidth(),
+                     upscale_params.GetScaledHeight(), 0, tex_tuple.format, tex_tuple.type,
+                     &upscaled_buf[0]);
+
+        if (upscale_params.type != SurfaceType::Texture) {
+            BlitTextures(tmp_tex.handle, upscale_params.GetScaledRect(),
+                         upscaled_surface->texture.handle, upscale_params.GetScaledRect(),
+                         SurfaceType::Texture, read_framebuffer.handle, draw_framebuffer.handle);
+        }
+
+        return upscaled_surface;
+    }
     return surface;
 }
 
