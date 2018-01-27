@@ -15,6 +15,7 @@ class AboutDialog;
 class Config;
 class EmuThread;
 class GameList;
+enum class GameListOpenTarget;
 class GImageInfo;
 class GPUCommandListWidget;
 class GPUCommandStreamWidget;
@@ -198,7 +199,4 @@ protected:
     void dragMoveEvent(QDragMoveEvent* event) override;
 };
 
-enum class GameListOpenTarget { SAVE_DATA = 0, APPLICATION = 1, UPDATE_DATA = 2 };
-
 Q_DECLARE_METATYPE(size_t);
-Q_DECLARE_METATYPE(GameListOpenTarget);

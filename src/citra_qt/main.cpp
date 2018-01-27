@@ -672,16 +672,16 @@ void GMainWindow::OnGameListLoadFile(QString game_path) {
 }
 
 void GMainWindow::OnGameListOpenFolder(u64 program_id, GameListOpenTarget target) {
-    std::string sdmc_dir;
     std::string path;
     std::string open_target;
 
     switch (target) {
-    case GameListOpenTarget::SAVE_DATA:
+    case GameListOpenTarget::SAVE_DATA: {
         open_target = "save data";
-        sdmc_dir = FileUtil::GetUserPath(D_SDMC_IDX);
+        std::string sdmc_dir = FileUtil::GetUserPath(D_SDMC_IDX);
         path = FileSys::ArchiveSource_SDSaveData::GetSaveDataPathFor(sdmc_dir, program_id);
         break;
+    }
     case GameListOpenTarget::APPLICATION:
         open_target = "application";
         path = Service::AM::GetTitlePath(Service::FS::MediaType::SDMC, program_id) + "content/";
@@ -704,7 +704,7 @@ void GMainWindow::OnGameListOpenFolder(u64 program_id, GameListOpenTarget target
         return;
     }
 
-    LOG_INFO(Frontend, "Opening %s path for program_id=%" PRIu64, open_target, program_id);
+    LOG_INFO(Frontend, "Opening %s path for program_id=%" PRIu64, open_target.c_str(), program_id);
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(qpath));
 }

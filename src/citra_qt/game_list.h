@@ -8,7 +8,6 @@
 #include <QWidget>
 #include "common/common_types.h"
 
-enum class GameListOpenTarget;
 class GameListWorker;
 class GMainWindow;
 class QFileSystemWatcher;
@@ -21,6 +20,8 @@ class QStandardItemModel;
 class QTreeView;
 class QToolButton;
 class QVBoxLayout;
+
+enum class GameListOpenTarget { SAVE_DATA = 0, APPLICATION = 1, UPDATE_DATA = 2 };
 
 class GameList : public QWidget {
     Q_OBJECT
@@ -100,3 +101,5 @@ private:
     GameListWorker* current_worker = nullptr;
     QFileSystemWatcher* watcher = nullptr;
 };
+
+Q_DECLARE_METATYPE(GameListOpenTarget);
