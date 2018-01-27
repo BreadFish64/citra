@@ -318,8 +318,19 @@ void GameList::PopupContextMenu(const QPoint& menu_location) {
     QMenu context_menu;
     QAction* open_save_location = context_menu.addAction(tr("Open Save Data Location"));
     open_save_location->setEnabled(program_id != 0);
+    QAction* open_application_location = context_menu.addAction(tr("Open Application Location"));
+    QAction* open_update_location = context_menu.addAction(tr("Open Update Data Location"));
+    open_save_location->setEnabled(program_id != 0);
+    open_application_location->setVisible(FileUtil::Exists(
+        Service::AM::GetTitleContentPath(Service::FS::MediaType::SDMC, program_id)));
+    open_update_location->setEnabled(0x4000000000000 <= program_id &&
+                                     program_id <= 0x40000FFFFFFFF);
     connect(open_save_location, &QAction::triggered,
-            [&]() { emit OpenSaveFolderRequested(program_id); });
+            [&]() { emit OpenFolderRequested(program_id, GameListOpenTarget::SAVE_DATA); });
+    connect(open_application_location, &QAction::triggered,
+            [&]() { emit OpenFolderRequested(program_id, GameListOpenTarget::APPLICATION); });
+    connect(open_update_location, &QAction::triggered,
+            [&]() { emit OpenFolderRequested(program_id, GameListOpenTarget::UPDATE_DATA); });
     context_menu.exec(tree_view->viewport()->mapToGlobal(menu_location));
 }
 

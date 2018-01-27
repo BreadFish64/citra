@@ -128,7 +128,7 @@ private slots:
     void OnStopGame();
     /// Called whenever a user selects a game in the game list widget.
     void OnGameListLoadFile(QString game_path);
-    void OnGameListOpenSaveFolder(u64 program_id);
+    void OnGameListOpenFolder(u64 program_id, GameListOpenTarget target);
     void OnMenuLoadFile();
     void OnMenuInstallCIA();
     void OnUpdateProgress(size_t written, size_t total);
@@ -198,4 +198,7 @@ protected:
     void dragMoveEvent(QDragMoveEvent* event) override;
 };
 
+enum class GameListOpenTarget { SAVE_DATA = 0, APPLICATION = 1, UPDATE_DATA = 2 };
+
 Q_DECLARE_METATYPE(size_t);
+Q_DECLARE_METATYPE(GameListOpenTarget);
