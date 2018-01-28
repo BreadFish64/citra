@@ -677,17 +677,17 @@ void GMainWindow::OnGameListOpenFolder(u64 program_id, GameListOpenTarget target
 
     switch (target) {
     case GameListOpenTarget::SAVE_DATA: {
-        open_target = "save data";
+        open_target = "Save Data";
         std::string sdmc_dir = FileUtil::GetUserPath(D_SDMC_IDX);
         path = FileSys::ArchiveSource_SDSaveData::GetSaveDataPathFor(sdmc_dir, program_id);
         break;
     }
     case GameListOpenTarget::APPLICATION:
-        open_target = "application";
+        open_target = "Application";
         path = Service::AM::GetTitlePath(Service::FS::MediaType::SDMC, program_id) + "content/";
         break;
     case GameListOpenTarget::UPDATE_DATA:
-        open_target = "update data";
+        open_target = "Update Data";
         path = Service::AM::GetTitlePath(Service::FS::MediaType::SDMC, program_id + 0xe00000000) +
                "content/";
         break;
@@ -700,11 +700,14 @@ void GMainWindow::OnGameListOpenFolder(u64 program_id, GameListOpenTarget target
 
     QDir dir(qpath);
     if (!dir.exists()) {
-        QMessageBox::critical(this, tr("Error Opening Save Folder"), tr("Folder does not exist!"));
+        QMessageBox::critical(
+            this, tr("Error Opening %1 Folder").arg(QString::fromStdString(open_target)),
+            tr("Folder does not exist!"));
         return;
     }
 
-    LOG_INFO(Frontend, "Opening %s path for program_id=%" PRIu64, open_target.c_str(), program_id);
+    LOG_INFO(Frontend, "Opening %s path for program_id=%016" PRIx64, open_target.c_str(),
+             program_id);
 
     QDesktopServices::openUrl(QUrl::fromLocalFile(qpath));
 }
