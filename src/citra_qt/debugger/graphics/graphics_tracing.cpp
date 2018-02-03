@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <boost/range/algorithm/copy.hpp>
 #include "citra_qt/debugger/graphics/graphics_tracing.h"
+#include "citra_qt/hotkeys.h"
 #include "common/common_types.h"
 #include "core/hw/gpu.h"
 #include "core/hw/lcd.h"
@@ -26,10 +27,20 @@ GraphicsTracingWidget::GraphicsTracingWidget(std::shared_ptr<Pica::DebugContext>
 
     setObjectName("CiTracing");
 
-    QPushButton* start_recording = new QPushButton(tr("Start Recording"));
-    QPushButton* stop_recording =
-        new QPushButton(QIcon::fromTheme("document-save"), tr("Stop and Save"));
-    QPushButton* abort_recording = new QPushButton(tr("Abort Recording"));
+    QPushButton* start_recording = new QPushButton(
+        tr("Start Recording") +
+        QString(" (" + GetKeySequence("CiTrace Recorder", "Start Recording").toString() + ")"));
+    QPushButton* stop_recording = new QPushButton(
+        QIcon::fromTheme("document-save"),
+        tr("Stop and Save") +
+            QString(" (" + GetKeySequence("CiTrace Recorder", "Stop Recording").toString() + ")"));
+    QPushButton* abort_recording = new QPushButton(
+        tr("Abort Recording") +
+        QString(" (" + GetKeySequence("CiTrace Recorder", "Abort Recording").toString() + ")"));
+
+    start_recording->setShortcut(GetKeySequence("CiTrace Recorder", "Start Recording"));
+    stop_recording->setShortcut(GetKeySequence("CiTrace Recorder", "Stop Recording"));
+    abort_recording->setShortcut(GetKeySequence("CiTrace Recorder", "Abort Recording"));
 
     connect(this, &GraphicsTracingWidget::SetStartTracingButtonEnabled, start_recording,
             &QPushButton::setVisible);

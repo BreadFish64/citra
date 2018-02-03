@@ -24,6 +24,11 @@
        <string>General</string>
       </attribute>
      </widget>
+     <widget class="ConfigureHotkeys" name="hotkeysTab">
+      <attribute name="title">
+       <string>Hotkeys</string>
+      </attribute>
+     </widget>
      <widget class="ConfigureSystem" name="systemTab">
       <attribute name="title">
        <string>System</string>
@@ -70,6 +75,12 @@
    <class>ConfigureGeneral</class>
    <extends>QWidget</extends>
    <header>configuration/configure_general.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ConfigureHotkeys</class>
+   <extends>QWidget</extends>
+   <header>configuration/configure_hotkeys.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>

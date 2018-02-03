@@ -15,6 +15,7 @@
 #include <QSpinBox>
 #include <QTreeView>
 #include "citra_qt/debugger/graphics/graphics_vertex_shader.h"
+#include "citra_qt/hotkeys.h"
 #include "citra_qt/util/util.h"
 #include "video_core/pica_state.h"
 #include "video_core/shader/debug_data.h"
@@ -387,7 +388,10 @@ GraphicsVertexShaderWidget::GraphicsVertexShaderWidget(
     binary_list->setRootIsDecorated(false);
     binary_list->setAlternatingRowColors(true);
 
-    auto dump_shader = new QPushButton(QIcon::fromTheme("document-save"), tr("Dump"));
+    auto dump_shader = new QPushButton(
+        QIcon::fromTheme("document-save"),
+        tr("Dump") + QString(" (" + GetKeySequence("Pica Vertex Shader", "Dump").toString() + ")"));
+    dump_shader->setShortcut(GetKeySequence("Pica Vertex Shader", "Dump"));
 
     instruction_description = new QLabel;
 

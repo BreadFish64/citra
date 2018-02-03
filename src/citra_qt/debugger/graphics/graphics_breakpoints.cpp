@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 #include "citra_qt/debugger/graphics/graphics_breakpoints.h"
 #include "citra_qt/debugger/graphics/graphics_breakpoints_p.h"
+#include "citra_qt/hotkeys.h"
 #include "common/assert.h"
 
 BreakPointModel::BreakPointModel(std::shared_ptr<Pica::DebugContext> debug_context, QObject* parent)
@@ -134,8 +135,11 @@ GraphicsBreakPointsWidget::GraphicsBreakPointsWidget(
     setObjectName("PicaBreakPointsWidget");
 
     status_text = new QLabel(tr("Emulation running"));
-    resume_button = new QPushButton(tr("Resume"));
+    resume_button = new QPushButton(
+        tr("Resume") +
+        QString(" (" + GetKeySequence("Pica Breakpoints", "Resume").toString() + ")"));
     resume_button->setEnabled(false);
+    resume_button->setShortcut(GetKeySequence("Pica Breakpoints", "Resume"));
 
     breakpoint_model = new BreakPointModel(debug_context, this);
     breakpoint_list = new QTreeView;

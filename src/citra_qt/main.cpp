@@ -106,6 +106,8 @@ GMainWindow::GMainWindow() : config(new Config()), emu_thread(nullptr) {
     ui.setupUi(this);
     statusBar()->hide();
 
+    LoadHotkeys();
+
     InitializeWidgets();
     InitializeDebugWidgets();
     InitializeRecentFileMenuActions();
@@ -276,7 +278,7 @@ void GMainWindow::InitializeRecentFileMenuActions() {
 }
 
 void GMainWindow::InitializeHotkeys() {
-    RegisterHotkey("Main Window", "Load File", QKeySequence::Open);
+    /*RegisterHotkey("Main Window", "Load File", QKeySequence::Open);
     RegisterHotkey("Main Window", "Start Emulation");
     RegisterHotkey("Main Window", "Swap Screens", QKeySequence(tr("F9")));
     RegisterHotkey("Main Window", "Toggle Screen Layout", QKeySequence(tr("F10")));
@@ -321,7 +323,29 @@ void GMainWindow::InitializeHotkeys() {
                     Settings::values.frame_limit -= SPEED_LIMIT_STEP;
                     UpdateStatusBar();
                 }
-            });
+            });*/
+    ui.action_Load_File->setShortcut(GetKeySequence("Main Window", "Load File"));
+    ui.action_Load_File->setShortcutContext(GetShortcutContext("Main Window", "Load File"));
+
+    ui.action_Exit->setShortcut(GetKeySequence("Main Window", "Exit Citra"));
+    ui.action_Exit->setShortcutContext(GetShortcutContext("Main Window", "Exit Citra"));
+
+    ui.action_Start->setShortcut(GetKeySequence("Main Window", "Start Emulation"));
+    ui.action_Start->setShortcutContext(GetShortcutContext("Main Window", "Start Emulation"));
+
+    ui.action_Pause->setShortcut(GetKeySequence("Main Window", "Pause Emulation"));
+    ui.action_Pause->setShortcutContext(GetShortcutContext("Main Window", "Pause Emulation"));
+
+    ui.action_Stop->setShortcut(GetKeySequence("Main Window", "Stop Emulation"));
+    ui.action_Stop->setShortcutContext(GetShortcutContext("Main Window", "Stop Emulation"));
+
+    ui.action_Show_Filter_Bar->setShortcut(GetKeySequence("Main Window", "Toggle Filter Bar"));
+    ui.action_Show_Filter_Bar->setShortcutContext(
+        GetShortcutContext("Main Window", "Toggle Filter Bar"));
+
+    ui.action_Show_Status_Bar->setShortcut(GetKeySequence("Main Window", "Toggle Status Bar"));
+    ui.action_Show_Status_Bar->setShortcutContext(
+        GetShortcutContext("Main Window", "Toggle Status Bar"));
 }
 
 void GMainWindow::ShowUpdaterWidgets() {
@@ -329,6 +353,8 @@ void GMainWindow::ShowUpdaterWidgets() {
     ui.action_Open_Maintenance_Tool->setVisible(UISettings::values.updater_found);
 
     connect(updater, &Updater::CheckUpdatesDone, this, &GMainWindow::OnUpdateFound);
+    connect(GetHotkey("Main Window", "Swap Screens", render_window), SIGNAL(activated()), this,
+            SLOT(OnSwapScreens()));
 }
 
 void GMainWindow::SetDefaultUIGeometry() {
@@ -405,7 +431,6 @@ void GMainWindow::ConnectMenuEvents() {
             &GMainWindow::ToggleWindowMode);
     connect(ui.action_Display_Dock_Widget_Headers, &QAction::triggered, this,
             &GMainWindow::OnDisplayTitleBars);
-    ui.action_Show_Filter_Bar->setShortcut(tr("CTRL+F"));
     connect(ui.action_Show_Filter_Bar, &QAction::triggered, this, &GMainWindow::OnToggleFilterBar);
     connect(ui.action_Show_Status_Bar, &QAction::triggered, statusBar(), &QStatusBar::setVisible);
     ui.action_Fullscreen->setShortcut(GetHotkey("Main Window", "Fullscreen", this)->key());
@@ -1045,11 +1070,10 @@ void GMainWindow::UpdateStatusBar() {
 
     if (Settings::values.use_frame_limit) {
         emu_speed_label->setText(tr("Speed: %1% / %2%")
-                                    .arg(results.emulation_speed * 100.0, 0, 'f', 0)
-                                    .arg(Settings::values.frame_limit));
+                                     .arg(results.emulation_speed * 100.0, 0, 'f', 0)
+                                     .arg(Settings::values.frame_limit));
     } else {
-        emu_speed_label->setText(tr("Speed: %1%")
-                                    .arg(results.emulation_speed * 100.0, 0, 'f', 0));
+        emu_speed_label->setText(tr("Speed: %1%").arg(results.emulation_speed * 100.0, 0, 'f', 0));
     }
     game_fps_label->setText(tr("Game: %1 FPS").arg(results.game_fps, 0, 'f', 0));
     emu_frametime_label->setText(tr("Frame: %1 ms").arg(results.frametime * 1000.0, 0, 'f', 2));
