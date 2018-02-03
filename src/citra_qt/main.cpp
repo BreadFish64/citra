@@ -827,7 +827,7 @@ void GMainWindow::OnMenuReportCompatibility() {
         QMessageBox::critical(
             this, tr("Missing Citra Account"),
             tr("In order to submit a game compatibility test case, you must link your Citra "
-               "account.<br><br/>To link your Citra account, go to Emulation \> Configuration \> "
+               "account.<br><br/>To link your Citra account, go to Emulation \\> Configuration \\> "
                "Web."));
     }
 }
