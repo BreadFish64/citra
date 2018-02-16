@@ -1475,13 +1475,9 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
         }
     }
 
-    constexpr bool TEX_UPSCALING_ENABLE = true;
-    constexpr u16 TEX_UPSCALING_MAX_FACTOR = 6;
-
-    if (TEX_UPSCALING_ENABLE && surface->res_scale == 1) {
-        const size_t scale_factor =
-            std::min({ TEX_UPSCALING_MAX_FACTOR});
-        if (scale_factor == 1) {
+    if ( surface->res_scale == 1) {
+        const size_t scale_factor = VideoCore::GetTextureScaleFactor();
+        if (scale_factor == 0) {
             return surface;
         }
 

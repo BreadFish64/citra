@@ -121,6 +121,9 @@ use_shader_jit =
 # factor for the 3DS resolution
 resolution_factor =
 
+# Resolution scale factor
+texture_filter_factor =
+
 # Whether to enable V-Sync (caps the framerate at 60FPS) or not.
 # 0 (default): Off, 1: On
 vsync_enabled =

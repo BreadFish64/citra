@@ -53,5 +53,6 @@ void RequestScreenshot(void* data, std::function<void()> callback,
                        const Layout::FramebufferLayout& layout);
 
 u16 GetResolutionScaleFactor();
+u16 GetTextureScaleFactor();
 
 } // namespace VideoCore

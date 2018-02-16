@@ -83,4 +83,8 @@ u16 GetResolutionScaleFactor() {
     }
 }
 
+u16 GetTextureScaleFactor() {
+    return Settings::values.texture_filter_factor;
+}
+
 } // namespace VideoCore
