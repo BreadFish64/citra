@@ -5,12 +5,13 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <vector>
+#include "audio_core/audio_types.h"
 #include "audio_core/codec.h"
 #include "common/assert.h"
 #include "common/common_types.h"
 #include "common/math_util.h"
 
+namespace AudioCore {
 namespace Codec {
 
 StereoBuffer16 DecodeADPCM(const u8* const data, const size_t sample_count,
@@ -78,26 +79,24 @@ StereoBuffer16 DecodeADPCM(const u8* const data, const size_t sample_count,
     return ret;
 }
 
-static s16 SignExtendS8(u8 x) {
-    // The data is actually signed PCM8.
-    // We sign extend this to signed PCM16.
-    return static_cast<s16>(static_cast<s8>(x));
-}
-
 StereoBuffer16 DecodePCM8(const unsigned num_channels, const u8* const data,
                           const size_t sample_count) {
     ASSERT(num_channels == 1 || num_channels == 2);
+
+    const auto decode_sample = [](u8 sample) {
+        return static_cast<s16>(static_cast<u16>(sample) << 8);
+    };
 
     StereoBuffer16 ret(sample_count);
 
     if (num_channels == 1) {
         for (size_t i = 0; i < sample_count; i++) {
-            ret[i].fill(SignExtendS8(data[i]));
+            ret[i].fill(decode_sample(data[i]));
         }
     } else {
         for (size_t i = 0; i < sample_count; i++) {
-            ret[i][0] = SignExtendS8(data[i * 2 + 0]);
-            ret[i][1] = SignExtendS8(data[i * 2 + 1]);
+            ret[i][0] = decode_sample(data[i * 2 + 0]);
+            ret[i][1] = decode_sample(data[i * 2 + 1]);
         }
     }
 
@@ -124,4 +123,5 @@ StereoBuffer16 DecodePCM16(const unsigned num_channels, const u8* const data,
 
     return ret;
 }
-};
+} // namespace Codec
+} // namespace AudioCore

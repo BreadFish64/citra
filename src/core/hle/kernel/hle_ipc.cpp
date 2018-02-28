@@ -6,6 +6,7 @@
 #include <vector>
 #include "common/assert.h"
 #include "common/common_types.h"
+#include "core/hle/kernel/event.h"
 #include "core/hle/kernel/handle_table.h"
 #include "core/hle/kernel/hle_ipc.h"
 #include "core/hle/kernel/kernel.h"
@@ -30,6 +31,40 @@ void SessionRequestHandler::ClientDisconnected(SharedPtr<ServerSession> server_s
         connected_sessions.end());
 }
 
+SharedPtr<Event> HLERequestContext::SleepClientThread(SharedPtr<Thread> thread,
+                                                      const std::string& reason,
+                                                      std::chrono::nanoseconds timeout,
+                                                      WakeupCallback&& callback) {
+    // Put the client thread to sleep until the wait event is signaled or the timeout expires.
+    thread->wakeup_callback = [ context = *this, callback ](
+        ThreadWakeupReason reason, SharedPtr<Thread> thread, SharedPtr<WaitObject> object) mutable {
+        ASSERT(thread->status == THREADSTATUS_WAIT_HLE_EVENT);
+        callback(thread, context, reason);
+
+        auto& process = thread->owner_process;
+        // We must copy the entire command buffer *plus* the entire static buffers area, since
+        // the translation might need to read from it in order to retrieve the StaticBuffer
+        // target addresses.
+        std::array<u32_le, IPC::COMMAND_BUFFER_LENGTH + 2 * IPC::MAX_STATIC_BUFFERS> cmd_buff;
+        Memory::ReadBlock(*process, thread->GetCommandBufferAddress(), cmd_buff.data(),
+                          cmd_buff.size() * sizeof(u32));
+        context.WriteToOutgoingCommandBuffer(cmd_buff.data(), *process, Kernel::g_handle_table);
+        // Copy the translated command buffer back into the thread's command buffer area.
+        Memory::WriteBlock(*process, thread->GetCommandBufferAddress(), cmd_buff.data(),
+                           cmd_buff.size() * sizeof(u32));
+    };
+
+    auto event = Kernel::Event::Create(Kernel::ResetType::OneShot, "HLE Pause Event: " + reason);
+    thread->status = THREADSTATUS_WAIT_HLE_EVENT;
+    thread->wait_objects = {event};
+    event->AddWaitingThread(thread);
+
+    if (timeout.count() > 0)
+        thread->WakeAfterDelay(timeout.count());
+
+    return event;
+}
+
 HLERequestContext::HLERequestContext(SharedPtr<ServerSession> session)
     : session(std::move(session)) {
     cmd_buf[0] = 0;
@@ -52,7 +87,6 @@ void HLERequestContext::ClearIncomingObjects() {
 }
 
 const std::vector<u8>& HLERequestContext::GetStaticBuffer(u8 buffer_id) const {
-    ASSERT_MSG(!static_buffers[buffer_id].empty(), "Empty static buffer!");
     return static_buffers[buffer_id];
 }
 
