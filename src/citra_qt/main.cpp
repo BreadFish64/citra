@@ -1230,7 +1230,8 @@ void GMainWindow::filterBarSetChecked(bool state) {
 }
 
 void GMainWindow::UpdateUITheme() {
-    if (UISettings::values.theme != UISettings::themes[0].second) {
+    if (UISettings::values.theme != UISettings::themes[0].second &&
+        !UISettings::values.theme.isEmpty()) {
         QString theme_uri(":" + UISettings::values.theme + "/style.qss");
         QFile f(theme_uri);
         if (!f.exists()) {
@@ -1241,9 +1242,11 @@ void GMainWindow::UpdateUITheme() {
             qApp->setStyleSheet(ts.readAll());
             GMainWindow::setStyleSheet(ts.readAll());
         }
+        QIcon::setThemeName(UISettings::values.theme);
     } else {
         qApp->setStyleSheet("");
         GMainWindow::setStyleSheet("");
+        QIcon::setThemeName("default");
     }
 }
 
