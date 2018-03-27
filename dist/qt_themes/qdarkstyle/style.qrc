@@ -1,5 +1,5 @@
 <RCC>
-  <qresource prefix="icons">
+  <qresource prefix="icons/qdarkstyle">
     <file alias="index.theme">icons/index.theme</file>
   </qresource>
   <qresource prefix="qss_icons">
