@@ -823,8 +823,8 @@ void GMainWindow::OnGameListOpenDirectory(QString directory) {
     } else {
         path = directory;
     }
-    if (QFileInfo::exists(path)) {
-        QMessageBox::critical(this, tr("Error Opening %1 Folder").arg(path),
+    if (!QFileInfo::exists(path)) {
+        QMessageBox::critical(this, tr("Error Opening %1").arg(path),
                               tr("Folder does not exist!"));
         return;
     }
