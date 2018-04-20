@@ -20,6 +20,7 @@ class ClickableLabel;
 class EmuThread;
 class GameList;
 enum class GameListOpenTarget;
+class GameListPlaceholder;
 class GImageInfo;
 class GPUCommandListWidget;
 class GPUCommandStreamWidget;
@@ -145,13 +146,14 @@ private slots:
     /// Called whenever a user selects a game in the game list widget.
     void OnGameListLoadFile(QString game_path);
     void OnGameListOpenFolder(u64 program_id, GameListOpenTarget target);
+    void OnGameListOpenDirectory(QString path);
+    void OnGameListAddDirectory();
+    void OnGameListShowList(bool show);
     void OnMenuLoadFile();
     void OnMenuInstallCIA();
     void OnUpdateProgress(size_t written, size_t total);
     void OnCIAInstallReport(Service::AM::InstallStatus status, QString filepath);
     void OnCIAInstallFinished();
-    /// Called whenever a user selects the "File->Select Game List Root" menu item
-    void OnMenuSelectGameListRoot();
     void OnMenuRecentFile();
     void OnConfigure();
     void OnToggleFilterBar();
@@ -180,6 +182,8 @@ private:
     Ui::MainWindow ui;
 
     GRenderWindow* render_window;
+
+    GameListPlaceholder* game_list_placeholder;
 
     // Status bar elements
     QProgressBar* progress_bar = nullptr;

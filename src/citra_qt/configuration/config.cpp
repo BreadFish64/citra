@@ -198,8 +198,34 @@ void Config::ReadValues() {
     qt_config->beginGroup("Paths");
     UISettings::values.roms_path = qt_config->value("romsPath").toString();
     UISettings::values.symbols_path = qt_config->value("symbolsPath").toString();
-    UISettings::values.gamedir = qt_config->value("gameListRootDir", ".").toString();
-    UISettings::values.gamedir_deepscan = qt_config->value("gameListDeepScan", false).toBool();
+    UISettings::values.gamedir_depreciated = qt_config->value("gameListRootDir", ".").toString();
+    UISettings::values.gamedir_depreciated_deepscan =
+        qt_config->value("gameListDeepScan", false).toBool();
+    int size = qt_config->beginReadArray("gamedirs");
+    for (int i = 0; i < size; ++i) {
+        qt_config->setArrayIndex(i);
+        UISettings::GameDir gamedir;
+        gamedir.path = qt_config->value("path").toString();
+        gamedir.deep_scan = qt_config->value("deep_scan", false).toBool();
+        gamedir.expanded = qt_config->value("expanded", true).toBool();
+        UISettings::values.gamedirs.append(gamedir);
+    }
+    qt_config->endArray();
+    // create NAND and SD card directories if empty, these are not removable through the UI, also
+    // carries over old game list settings if present
+    if (UISettings::values.gamedirs.isEmpty()) {
+        UISettings::GameDir gamedir;
+        gamedir.path = "INSTALLED";
+        gamedir.expanded = true;
+        UISettings::values.gamedirs.append(gamedir);
+        gamedir.path = "SYSTEM";
+        UISettings::values.gamedirs.append(gamedir);
+        if (UISettings::values.gamedir_depreciated != ".") {
+            gamedir.path = UISettings::values.gamedir_depreciated;
+            gamedir.deep_scan = UISettings::values.gamedir_depreciated_deepscan;
+            UISettings::values.gamedirs.append(gamedir);
+        }
+    }
     UISettings::values.recent_files = qt_config->value("recentFiles").toStringList();
     UISettings::values.language = qt_config->value("language", "").toString();
     qt_config->endGroup();
@@ -370,8 +396,15 @@ void Config::SaveValues() {
     qt_config->beginGroup("Paths");
     qt_config->setValue("romsPath", UISettings::values.roms_path);
     qt_config->setValue("symbolsPath", UISettings::values.symbols_path);
-    qt_config->setValue("gameListRootDir", UISettings::values.gamedir);
-    qt_config->setValue("gameListDeepScan", UISettings::values.gamedir_deepscan);
+    qt_config->beginWriteArray("gamedirs");
+    for (int i = 0; i < UISettings::values.gamedirs.size(); ++i) {
+        qt_config->setArrayIndex(i);
+        const auto& gamedir = UISettings::values.gamedirs.at(i);
+        qt_config->setValue("path", gamedir.path);
+        qt_config->setValue("deep_scan", gamedir.deep_scan);
+        qt_config->setValue("expanded", gamedir.expanded);
+    }
+    qt_config->endArray();
     qt_config->setValue("recentFiles", UISettings::values.recent_files);
     qt_config->setValue("language", UISettings::values.language);
     qt_config->endGroup();
