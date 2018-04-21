@@ -824,8 +824,7 @@ void GMainWindow::OnGameListOpenDirectory(QString directory) {
         path = directory;
     }
     if (!QFileInfo::exists(path)) {
-        QMessageBox::critical(this, tr("Error Opening %1").arg(path),
-                              tr("Folder does not exist!"));
+        QMessageBox::critical(this, tr("Error Opening %1").arg(path), tr("Folder does not exist!"));
         return;
     }
     QDesktopServices::openUrl(QUrl::fromLocalFile(path));
@@ -845,6 +844,8 @@ void GMainWindow::OnGameListAddDirectory() {
 }
 
 void GMainWindow::OnGameListShowList(bool show) {
+    if (emulation_running)
+        return;
     game_list->setVisible(show);
     game_list_placeholder->setVisible(!show);
 };
@@ -1379,6 +1380,7 @@ void GMainWindow::SyncMenuUISettings() {
 #endif
 
 int main(int argc, char* argv[]) {
+
     Log::Filter log_filter(Log::Level::Info);
     Log::SetFilter(&log_filter);
 
