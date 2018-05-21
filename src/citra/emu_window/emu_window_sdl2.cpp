@@ -122,8 +122,13 @@ EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen) {
     SDL_SetMainReady();
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+#ifdef CITRA_USE_GLES
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#endif
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
@@ -154,8 +159,11 @@ EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen) {
         LOG_CRITICAL(Frontend, "Failed to create SDL2 GL context: {}", SDL_GetError());
         exit(1);
     }
-
+#ifdef CITRA_USE_GLES
+    if (!gladLoadGLES2Loader(static_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
+#else
     if (!gladLoadGLLoader(static_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
+#endif
         LOG_CRITICAL(Frontend, "Failed to initialize GL functions: {}", SDL_GetError());
         exit(1);
     }

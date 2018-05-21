@@ -7,6 +7,11 @@ include(CMakeDependentOption)
 
 project(citra)
 
+option(CITRA_USE_GLES OFF)
+if (CITRA_USE_GLES)
+add_definitions(-DCITRA_USE_GLES)
+endif()
+
 # Set bundled sdl2/qt as dependent options.
 # OFF by default, but if ENABLE_SDL2 and MSVC are true then ON
 option(ENABLE_SDL2 "Enable the SDL2 frontend" ON)
