@@ -98,22 +98,25 @@ GLuint LoadProgram(bool separable_program, const std::vector<GLuint>& shaders) {
 
 std::string GetGLSLVersionString() {
     std::string ver;
-    if (GLAD_GL_ES_VERSION_3_2)
+
+    if (GLAD_GL_ES_VERSION_3_2) {
         ver = "#version 320 es\n";
-    else if (GLAD_GL_ES_VERSION_3_1)
+    } else if (GLAD_GL_ES_VERSION_3_1) {
         ver = "#version 310 es\n";
-    else if (GLAD_GL_ES_VERSION_3_0)
+    } else if (GLAD_GL_ES_VERSION_3_0) {
         ver = "#version 300 es\n";
-    else if (GLAD_GL_VERSION_3_3)
+    } else if (GLAD_GL_VERSION_3_3) {
         ver = "#version 330\n";
-    else if (GLAD_GL_VERSION_3_2)
+    } else if (GLAD_GL_VERSION_3_2) {
         ver = "#version 150\n";
-    else if (GLAD_GL_VERSION_3_1)
+    } else if (GLAD_GL_VERSION_3_1) {
         ver = "#version 140\n";
+    }
 
     // Lower versions arent supported
-    else
+    else {
         ver = "#version ERROR\n";
+    }
 
     return ver;
 }

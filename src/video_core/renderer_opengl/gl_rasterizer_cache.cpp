@@ -32,7 +32,7 @@
 #include "video_core/utils.h"
 #include "video_core/video_core.h"
 
-// Since GLES dosent support GL_UNSIGNED_INT_8_8_8_8 or GL_BGR , this will convert them to
+// Since GLES dosent support GL_UNSIGNED_INT_8_8_8_8 or GL_BGR , convert them to
 // GL_UNSIGNED_BYTE and GL_RGB respectively.
 #ifdef ANDROID
 #undef GL_UNSIGNED_INT_8_8_8_8
@@ -88,10 +88,8 @@ static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
  * Originally authored by afrantzis for apitrace
  */
 static inline void getTexImageOES(GLenum target, GLint level, GLint height, GLint width,
-                                  GLubyte* pixels) {
-    LOG_INFO(Render_OpenGL, "GLES getTexImageOES Workaround");
+                                  GLint depth, GLubyte* pixels) {
 
-    GLint depth = 1; // Since we are only using this for 2D lets ignore the 3D aspect
     memset(pixels, 0x80, height * width * 4);
 
     GLenum texture_binding = GL_NONE;

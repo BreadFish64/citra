@@ -3,7 +3,6 @@
 // Refer to the license.txt file included.
 
 #include <glad/glad.h>
-#include "common/assert.h"
 #include "common/common_funcs.h"
 #include "common/logging/log.h"
 #include "video_core/renderer_opengl/gl_state.h"
@@ -195,13 +194,12 @@ void OpenGLState::Apply() const {
     }
 
     // GLES3 does not support glLogicOp
-    if(!GLAD_GL_ES_VERSION_3_1) {
+    if (!GLAD_GL_ES_VERSION_3_1) {
         if (logic_op != cur_state.logic_op) {
             glLogicOp(logic_op);
         }
-    }
-    else {
-        LOG_TRACE(Render_OpenGL,"glLogicOps are unimplemented...");
+    } else {
+        LOG_TRACE(Render_OpenGL, "glLogicOps are unimplemented...");
     }
 
     // Textures

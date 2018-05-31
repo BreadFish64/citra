@@ -27,8 +27,8 @@
 namespace OpenGL {
 
 // Workaround for compiling shaders for GL ES
-#ifdef CITRA_USE_GLES
-static const char vertex_shader[] = R"(
+
+static const char vertex_shader_oes[] = R"(
 #version 300 es
 
 in vec2 vert_position;
@@ -51,7 +51,7 @@ void main() {
 }
 )";
 
-static const char fragment_shader[] = R"(
+static const char fragment_shader_oes[] = R"(
 #version 300 es
 
 in vec2 frag_tex_coord;
@@ -64,7 +64,6 @@ void main() {
 }
 )";
 
-#else
 static const char vertex_shader[] = R"(
 #version 150 core
 
@@ -100,7 +99,6 @@ void main() {
     color = texture(color_texture, frag_tex_coord);
 }
 )";
-#endif
 
 /**
  * Vertex structure that the drawn screen rectangles are composed of.
@@ -319,7 +317,11 @@ void RendererOpenGL::InitOpenGLObjects() {
                  0.0f);
 
     // Link shaders and get variable locations
-    shader.Create(vertex_shader, fragment_shader);
+    if (GLAD_GL_ES_VERSION_3_0) {
+        shader.Create(vertex_shader_oes, fragment_shader_oes);
+    } else {
+        shader.Create(vertex_shader, fragment_shader);
+    }
     state.draw.shader_program = shader.handle;
     state.Apply();
     uniform_modelview_matrix = glGetUniformLocation(shader.handle, "modelview_matrix");
@@ -384,7 +386,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
     case GPU::Regs::PixelFormat::RGBA8:
         internal_format = GL_RGBA8;
         texture.gl_format = GL_RGBA;
-        if (GLAD_GL_ES_VERSION_3_1) {
+        if (GLAD_GL_ES_VERSION_3_0) {
             texture.gl_type = GL_UNSIGNED_BYTE;
         } else {
             texture.gl_type = GL_UNSIGNED_INT_8_8_8_8;
@@ -397,6 +399,8 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
         // mostly everywhere) for words or half-words.
         // TODO: check how those behave on big-endian processors.
         internal_format = GL_RGB;
+
+        // GLES Dosen't support BGR , Use RGB instead
         if (GLAD_GL_ES_VERSION_3_1) {
             texture.gl_format = GL_RGB;
         } else {
@@ -584,7 +588,6 @@ Core::System::ResultStatus RendererOpenGL::Init() {
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 
@@ -604,7 +607,7 @@ Core::System::ResultStatus RendererOpenGL::Init() {
         return Core::System::ResultStatus::ErrorVideoCore_ErrorGenericDrivers;
     }
 
-    if (!(GLAD_GL_VERSION_3_3 || GLAD_GL_ES_VERSION_3_2)) {
+    if (!(GLAD_GL_VERSION_3_3 || GLAD_GL_ES_VERSION_3_0)) {
         return Core::System::ResultStatus::ErrorVideoCore_ErrorBelowGL33;
     }
 
