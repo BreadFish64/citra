@@ -1251,20 +1251,18 @@ std::string GenerateFragmentShader(const PicaFSConfig& config, bool separable_sh
 
     std::string out = OpenGL::GetGLSLVersionString();
 
-    if (separable_shader) {
-        out += "#extension GL_ARB_separate_shader_objects : enable\n";
-    }
-
     out += R"(
 #extension GL_ARB_shader_image_load_store : enable
 #extension GL_ARB_shader_image_size : enable
 #define ALLOW_SHADOW (defined(GL_ARB_shader_image_load_store) && defined(GL_ARB_shader_image_size))
 )";
 
-    out += GetVertexInterfaceDeclaration(false, separable_shader);
+    if (separable_shader) {
+        out += "#extension GL_ARB_separate_shader_objects : enable\n";
+    }
 
     out += R"(
-// High precision may or may not supported in GLES3. If it isn't, use medium precision instead
+// High precision may or may not supported in GLES3. If it isn't, use medium precision instead.
 #ifdef GL_ES
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -1276,13 +1274,9 @@ precision mediump samplerBuffer;
 #endif // GL_ES
 )";
 
-    out += R"(
-in vec4 primary_color;
-in vec2 texcoord[3];
-in float texcoord0_w;
-in vec4 normquat;
-in vec3 view;
+    out += GetVertexInterfaceDeclaration(false, separable_shader);
 
+    out += R"(
 #ifndef GL_ES
 in vec4 gl_FragCoord;
 #endif // GL_ES
@@ -1818,12 +1812,17 @@ void EmitPrim(Vertex vtx0, Vertex vtx1, Vertex vtx2) {
 };
 
 std::string GenerateFixedGeometryShader(const PicaFixedGSConfig& config, bool separable_shader) {
-    std::string out = "#version 330 core\n";
+    std::string out = OpenGL::GetGLSLVersionString();
+
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n\n";
     }
 
     out += R"(
+#ifdef GL_ES
+#extension GL_EXT_clip_cull_distance : enable
+#endif
+
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 3) out;
 
@@ -1853,7 +1852,8 @@ void main() {
 std::optional<std::string> GenerateGeometryShader(const Pica::Shader::ShaderSetup& setup,
                                                   const PicaGSConfig& config,
                                                   bool separable_shader) {
-    std::string out = "#version 330 core\n";
+    std::string out = OpenGL::GetGLSLVersionString();
+
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }

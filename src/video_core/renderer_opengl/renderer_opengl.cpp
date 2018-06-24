@@ -53,6 +53,13 @@ void main() {
 
 static const char fragment_shader_oes[] = R"(
 #version 300 es
+#ifdef GL_ES
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif // GL_FRAGMENT_PRECISION_HIGH
+#endif // GL_ES
 
 in vec2 frag_tex_coord;
 out vec4 color;
@@ -384,7 +391,7 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
 
     switch (format) {
     case GPU::Regs::PixelFormat::RGBA8:
-        internal_format = GL_RGBA8;
+        internal_format = GL_RGBA;
         texture.gl_format = GL_RGBA;
         if (GLAD_GL_ES_VERSION_3_0) {
             texture.gl_type = GL_UNSIGNED_BYTE;
