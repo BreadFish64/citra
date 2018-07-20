@@ -5,13 +5,17 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
+#include <map>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <boost/container/flat_map.hpp>
 #include "common/bit_field.h"
 #include "common/common_types.h"
 #include "core/hle/kernel/hle_ipc.h"
 #include "core/hle/kernel/kernel.h"
+#include "core/hle/service/sm/sm.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Namespace Service
@@ -188,6 +192,17 @@ void Shutdown();
 
 /// Map of named ports managed by the kernel, which can be retrieved using the ConnectToPort SVC.
 extern std::unordered_map<std::string, Kernel::SharedPtr<Kernel::ClientPort>> g_kernel_named_ports;
+
+struct ServiceModuleInfo {
+    std::string name;
+    u64 title_id;
+    std::function<void(SM::ServiceManager&)> init_function;
+};
+
+extern const std::array<ServiceModuleInfo, 40> service_module_map;
+
+/// Atempt to load an LLE service
+static bool AttemptLLE(const ServiceModuleInfo& service_module);
 
 /// Adds a port to the named port table
 void AddNamedPort(std::string name, Kernel::SharedPtr<Kernel::ClientPort> port);

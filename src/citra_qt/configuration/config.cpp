@@ -2,10 +2,12 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <unordered_map>
 #include <QSettings>
 #include "citra_qt/configuration/config.h"
 #include "citra_qt/ui_settings.h"
 #include "common/file_util.h"
+#include "core/hle/service/service.h"
 #include "input_common/main.h"
 #include "network/network.h"
 
@@ -166,6 +168,13 @@ void Config::ReadValues() {
     qt_config->beginGroup("Debugging");
     Settings::values.use_gdbstub = ReadSetting("use_gdbstub", false).toBool();
     Settings::values.gdbstub_port = ReadSetting("gdbstub_port", 24689).toInt();
+
+    qt_config->beginGroup("LLE");
+    for (const auto& service_module : Service::service_module_map) {
+        bool use_lle = ReadSetting(QString::fromStdString(service_module.name), false).toBool();
+        Settings::values.lle_modules.emplace(service_module.name, use_lle);
+    }
+    qt_config->endGroup();
     qt_config->endGroup();
 
     qt_config->beginGroup("WebService");
@@ -391,6 +400,12 @@ void Config::SaveValues() {
     qt_config->beginGroup("Debugging");
     WriteSetting("use_gdbstub", Settings::values.use_gdbstub, false);
     WriteSetting("gdbstub_port", Settings::values.gdbstub_port, 24689);
+
+    qt_config->beginGroup("LLE");
+    for (const auto& service_module : Settings::values.lle_modules) {
+        WriteSetting(QString::fromStdString(service_module.first), service_module.second);
+    }
+    qt_config->endGroup();
     qt_config->endGroup();
 
     qt_config->beginGroup("WebService");
