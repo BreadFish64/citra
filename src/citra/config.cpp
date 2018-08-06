@@ -193,8 +193,8 @@ void Config::ReadValues() {
         static_cast<u16>(sdl2_config->GetInteger("Debugging", "gdbstub_port", 24689));
 
     for (const auto& service_module : Service::service_module_map) {
-        bool use_lle = sdl2_config->GetBoolean("Debugging", "LLE\\" + service_module.first, false);
-        Settings::values.lle_modules.emplace(service_module.first, use_lle);
+        bool use_lle = sdl2_config->GetBoolean("Debugging", "LLE\\" + service_module.name, false);
+        Settings::values.lle_modules.emplace(service_module.name, use_lle);
     }
 
     // Web Service
