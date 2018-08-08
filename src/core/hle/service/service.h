@@ -201,9 +201,6 @@ struct ServiceModuleInfo {
 
 extern const std::array<ServiceModuleInfo, 40> service_module_map;
 
-/// Atempt to load an LLE service
-static bool AttemptLLE(const ServiceModuleInfo& service_module);
-
 /// Adds a port to the named port table
 void AddNamedPort(std::string name, Kernel::SharedPtr<Kernel::ClientPort> port);
 

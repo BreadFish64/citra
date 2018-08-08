@@ -218,18 +218,6 @@ void AddNamedPort(std::string name, SharedPtr<ClientPort> port) {
     g_kernel_named_ports.emplace(std::move(name), std::move(port));
 }
 
-/// Initialize ServiceManager
-void Init(std::shared_ptr<SM::ServiceManager>& sm) {
-    FS::ArchiveInit();
-    SM::ServiceManager::InstallInterfaces(sm);
-
-    for (const auto& service_module : service_module_map) {
-        if (!AttemptLLE(service_module) && service_module.init_function != nullptr)
-            service_module.init_function(*sm);
-    }
-    LOG_DEBUG(Service, "initialized OK");
-}
-
 bool AttemptLLE(const ServiceModuleInfo& service_module) {
     if (!Settings::values.lle_modules.at(service_module.name))
         return false;
@@ -245,6 +233,18 @@ bool AttemptLLE(const ServiceModuleInfo& service_module) {
     loader->Load(process);
     LOG_DEBUG(Service, "Service module \"{}\" has been successfully loaded.", service_module.name);
     return true;
+}
+
+/// Initialize ServiceManager
+void Init(std::shared_ptr<SM::ServiceManager>& sm) {
+    FS::ArchiveInit();
+    SM::ServiceManager::InstallInterfaces(sm);
+
+    for (const auto& service_module : service_module_map) {
+        if (!AttemptLLE(service_module) && service_module.init_function != nullptr)
+            service_module.init_function(*sm);
+    }
+    LOG_DEBUG(Service, "initialized OK");
 }
 
 /// Shutdown ServiceManager
