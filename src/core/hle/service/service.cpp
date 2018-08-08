@@ -218,7 +218,7 @@ void AddNamedPort(std::string name, SharedPtr<ClientPort> port) {
     g_kernel_named_ports.emplace(std::move(name), std::move(port));
 }
 
-bool AttemptLLE(const ServiceModuleInfo& service_module) {
+static bool AttemptLLE(const ServiceModuleInfo& service_module) {
     if (!Settings::values.lle_modules.at(service_module.name))
         return false;
     std::unique_ptr<Loader::AppLoader> loader =
