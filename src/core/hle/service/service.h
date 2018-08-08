@@ -4,12 +4,11 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <functional>
-#include <map>
 #include <string>
 #include <unordered_map>
-#include <utility>
 #include <boost/container/flat_map.hpp>
 #include "common/bit_field.h"
 #include "common/common_types.h"
