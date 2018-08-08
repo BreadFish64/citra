@@ -403,7 +403,7 @@ void Config::SaveValues() {
 
     qt_config->beginGroup("LLE");
     for (const auto& service_module : Settings::values.lle_modules) {
-        WriteSetting(QString::fromStdString(service_module.first), service_module.second);
+        WriteSetting(QString::fromStdString(service_module.first), service_module.second, false);
     }
     qt_config->endGroup();
     qt_config->endGroup();
