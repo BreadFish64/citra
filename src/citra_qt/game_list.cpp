@@ -317,12 +317,13 @@ void GameList::setFilterVisible(bool visibility) {
 }
 
 void GameList::setDirectoryWatcherEnabled(bool enabled) {
-    if (enabled)
+    if (enabled) {
         connect(watcher, &QFileSystemWatcher::directoryChanged, this,
                 &GameList::RefreshGameDirectory, Qt::UniqueConnection);
-    else
+    } else {
         disconnect(watcher, &QFileSystemWatcher::directoryChanged, this,
                    &GameList::RefreshGameDirectory);
+    }
 }
 
 void GameList::clearFilter() {
