@@ -1612,6 +1612,12 @@ std::string GenerateTrivialVertexShader(bool separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }
 
+    out += R"(
+#if defined(GL_EXT_clip_cull_distance)
+#extension GL_EXT_clip_cull_distance : enable
+#endif // defined(GL_EXT_clip_cull_distance)
+)";
+
     out += "layout(location = " + std::to_string((int)ATTRIBUTE_POSITION) +
            ") in vec4 vert_position;\n";
     out += "layout(location = " + std::to_string((int)ATTRIBUTE_COLOR) + ") in vec4 vert_color;\n";
@@ -1642,8 +1648,10 @@ void main() {
     normquat = vert_normquat;
     view = vert_view;
     gl_Position = vert_position;
+#if !defined(GL_ES) || defined(GL_EXT_clip_cull_distance)
     gl_ClipDistance[0] = -vert_position.z; // fixed PICA clipping plane z <= 0
     gl_ClipDistance[1] = dot(clip_coef, vert_position);
+#endif // !defined(GL_ES) || defined(GL_EXT_clip_cull_distance)
 }
 )";
 
@@ -1768,8 +1776,10 @@ struct Vertex {
            semantic(VSOutputAttributes::POSITION_Z) + ", " +
            semantic(VSOutputAttributes::POSITION_W) + ");\n";
     out += "    gl_Position = vtx_pos;\n";
+    out += "#if !defined(GL_ES) || defined(GL_EXT_clip_cull_distance)\n";
     out += "    gl_ClipDistance[0] = -vtx_pos.z;\n"; // fixed PICA clipping plane z <= 0
-    out += "    gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n\n";
+    out += "    gl_ClipDistance[1] = dot(clip_coef, vtx_pos);\n";
+    out += "#endif // !defined(GL_ES) || defined(GL_EXT_clip_cull_distance)\n\n";
 
     out += "    vec4 vtx_quat = GetVertexQuaternion(vtx);\n";
     out += "    normquat = mix(vtx_quat, -vtx_quat, bvec4(quats_opposite));\n\n";
@@ -1819,9 +1829,9 @@ std::string GenerateFixedGeometryShader(const PicaFixedGSConfig& config, bool se
     }
 
     out += R"(
-#ifdef GL_ES
+#if defined(GL_EXT_clip_cull_distance)
 #extension GL_EXT_clip_cull_distance : enable
-#endif
+#endif // defined(GL_EXT_clip_cull_distance)
 
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 3) out;
@@ -1857,6 +1867,12 @@ std::optional<std::string> GenerateGeometryShader(const Pica::Shader::ShaderSetu
     if (separable_shader) {
         out += "#extension GL_ARB_separate_shader_objects : enable\n";
     }
+
+    out += R"(
+#if defined(GL_EXT_clip_cull_distance)
+#extension GL_EXT_clip_cull_distance : enable
+#endif // defined(GL_EXT_clip_cull_distance)
+)";
 
     if (config.state.num_inputs % config.state.attributes_per_vertex != 0)
         return {};
