@@ -60,6 +60,17 @@ static constexpr std::array<FormatTuple, 5> fb_format_tuples = {{
     {GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4},   // RGBA4
 }};
 
+// Same as above, with minor changes for OpenGL ES. Replaced
+// GL_UNSIGNED_INT_8_8_8_8 with GL_UNSIGNED_BYTE and
+// GL_BGR with GL_BGR_EXT
+static constexpr std::array<FormatTuple, 5> fb_format_tuples_oes = {{
+    {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE},            // RGBA8
+    {GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE},              // RGB8
+    {GL_RGB5_A1, GL_RGBA, GL_UNSIGNED_SHORT_5_5_5_1}, // RGB5A1
+    {GL_RGB565, GL_RGB, GL_UNSIGNED_SHORT_5_6_5},     // RGB565
+    {GL_RGBA4, GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4},   // RGBA4
+}};
+
 static constexpr std::array<FormatTuple, 4> depth_format_tuples = {{
     {GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT}, // D16
     {},
@@ -73,6 +84,9 @@ static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
     const SurfaceType type = SurfaceParams::GetFormatType(pixel_format);
     if (type == SurfaceType::Color) {
         ASSERT(static_cast<std::size_t>(pixel_format) < fb_format_tuples.size());
+        if (GLAD_GL_ES_VERSION_3_1) {
+            return fb_format_tuples_oes[static_cast<unsigned int>(pixel_format)];
+        }
         return fb_format_tuples[static_cast<unsigned int>(pixel_format)];
     } else if (type == SurfaceType::Depth || type == SurfaceType::DepthStencil) {
         std::size_t tuple_idx = static_cast<std::size_t>(pixel_format) - 14;
@@ -85,10 +99,10 @@ static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
 /**
  * OpenGL ES does not support glGetTexImage. Obtain the pixels by attaching the
  * texture to a framebuffer.
- * Originally authored by afrantzis for apitrace
+ * Originally form https://github.com/apitrace/apitrace/blob/master/retrace/glstate_images.cpp
  */
-static inline void getTexImageOES(GLenum target, GLint level, GLint height, GLint width,
-                                  GLint depth, GLubyte* pixels) {
+static inline void getTexImageOES(GLenum target, GLint level, GLenum format, GLenum type,
+                                  GLint height, GLint width, GLint depth, GLubyte* pixels) {
 
     memset(pixels, 0x80, height * width * 4);
 
@@ -138,14 +152,13 @@ static inline void getTexImageOES(GLenum target, GLint level, GLint height, GLin
         if (status != GL_FRAMEBUFFER_COMPLETE) {
             LOG_ERROR(Render_OpenGL, "%s", status);
         }
-        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glReadPixels(0, 0, width, height, format, type, pixels);
         break;
     case GL_TEXTURE_3D_OES:
         for (int i = 0; i < depth; i++) {
             glFramebufferTexture3D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, texture,
                                    level, i);
-            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE,
-                         pixels + 4 * i * width * height);
+            glReadPixels(0, 0, width, height, format, type, pixels + 4 * i * width * height);
         }
         break;
     }
@@ -925,7 +938,8 @@ void CachedSurface::DownloadGLTexture(const MathUtil::Rectangle<u32>& rect, GLui
 
         glActiveTexture(GL_TEXTURE0);
         if (GLAD_GL_ES_VERSION_3_1) {
-            getTexImageOES(GL_TEXTURE_2D, 0, height, width, 0, &gl_buffer[buffer_offset]);
+            getTexImageOES(GL_TEXTURE_2D, 0, tuple.format, tuple.type, height, width, 0,
+                           &gl_buffer[buffer_offset]);
         } else {
             glGetTexImage(GL_TEXTURE_2D, 0, tuple.format, tuple.type, &gl_buffer[buffer_offset]);
         }
