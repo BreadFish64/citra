@@ -15,7 +15,7 @@
 
     <application
         android:name="org.citra_emu.citra.CitraApplication"
-        android:label="Citra Emulator"
+        android:label="@string/citra"
         android:icon="@drawable/ic_citra"
         android:allowBackup="true"
         android:supportsRtl="true"

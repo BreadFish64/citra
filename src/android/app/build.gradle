@@ -84,6 +84,7 @@ dependencies {
     implementation "com.android.support:cardview-v7:$androidSupportVersion"
     implementation "com.android.support:recyclerview-v7:$androidSupportVersion"
     implementation "com.android.support:design:$androidSupportVersion"
+    implementation "com.android.support:appcompat-v7:$androidSupportVersion"
 
     // Android TV UI libraries.
     implementation "com.android.support:leanback-v17:$androidSupportVersion"

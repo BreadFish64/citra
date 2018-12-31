@@ -17,6 +17,12 @@
         <item name="android:colorControlHighlight">?attr/colorAccent</item>
     </style>
 
+    <style name="CitraBase.ToolBarStyle" parent="Theme.AppCompat.Light.DarkActionBar">
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <item name="android:textColorSecondary">@android:color/white</item>
+        <item name="actionMenuTextColor">@android:color/white</item>
+    </style>
+
     <!-- Same as above, but use default action bar, and mandate margins. -->
     <style name="CitraSettingsBase" parent="Theme.AppCompat.Light.DarkActionBar">
         <item name="colorPrimary">@color/citra_orange</item>
