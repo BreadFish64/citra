@@ -29,17 +29,10 @@
                 android:layout_height="56dp"
                 android:background="@color/citra_orange_dark"
                 android:theme="@style/CitraBase.ToolBarStyle"
-                app:layout_constraintTop_toTopOf="parent" />
-
-            <android.support.v7.widget.RecyclerView
-                android:id="@+id/game_list"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"
-                tools:listitem="@layout/game_list_item">
+                tools:layout_editor_absoluteX="16dp" />
 
-            </android.support.v7.widget.RecyclerView>
+            <include layout="@layout/game_list" />
 
             <android.support.design.widget.FloatingActionButton
                 android:id="@+id/button_add_directory"
