@@ -20,6 +20,38 @@
 #include "input_common/sdl/sdl.h"
 #include "network/network.h"
 
+class SDLGLContext : public GraphicsContext {
+public:
+    explicit SDLGLContext() {
+        // create a hidden window to make the shared context against
+        window = SDL_CreateWindow("", SDL_WINDOWPOS_UNDEFINED, // x position
+                                  SDL_WINDOWPOS_UNDEFINED,     // y position
+                                  Core::kScreenTopWidth,
+                                  Core::kScreenTopHeight + Core::kScreenBottomHeight,
+                                  SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+        context = SDL_GL_CreateContext(window);
+    }
+
+    ~SDLGLContext() {
+        SDL_GL_DeleteContext(context);
+        SDL_DestroyWindow(window);
+    }
+
+    void MakeCurrent() override {
+        SDL_GL_MakeCurrent(window, context);
+    }
+
+    void DoneCurrent() override {
+        SDL_GL_MakeCurrent(window, nullptr);
+    }
+
+    void SwapBuffers() override {}
+
+private:
+    SDL_Window* window;
+    SDL_GLContext context;
+};
+
 void EmuWindow_SDL2::OnMouseMotion(s32 x, s32 y) {
     TouchMoved((unsigned)std::max(x, 0), (unsigned)std::max(y, 0));
     InputCommon::GetMotionEmu()->Tilt(x, y);
@@ -134,6 +166,7 @@ EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen) {
     SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
+    SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
 
     std::string window_title = fmt::format("Citra {} | {}-{}", Common::g_build_fullname,
                                            Common::g_scm_branch, Common::g_scm_desc);
@@ -152,7 +185,6 @@ EmuWindow_SDL2::EmuWindow_SDL2(bool fullscreen) {
     if (fullscreen) {
         Fullscreen();
     }
-
     gl_context = SDL_GL_CreateContext(render_window);
 
     if (gl_context == nullptr) {
@@ -256,4 +288,8 @@ void EmuWindow_SDL2::OnMinimalClientAreaChangeRequest(
     const std::pair<unsigned, unsigned>& minimal_size) {
 
     SDL_SetWindowMinimumSize(render_window, minimal_size.first, minimal_size.second);
+}
+
+std::unique_ptr<GraphicsContext> EmuWindow_SDL2::CreateSharedContext() const {
+    return std::make_unique<SDLGLContext>();
 }
