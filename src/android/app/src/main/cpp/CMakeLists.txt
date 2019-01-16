@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 
 add_library(citra-android SHARED
-            dummy.cpp
+            native.h
+            native.cpp
             )
 
 # find Android's log library

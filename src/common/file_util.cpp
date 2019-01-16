@@ -690,6 +690,15 @@ const std::string& GetUserPath(UserPath path, const std::string& new_path) {
 
         paths.emplace(UserPath::ConfigDir, user_path + CONFIG_DIR DIR_SEP);
         paths.emplace(UserPath::CacheDir, user_path + CACHE_DIR DIR_SEP);
+#elif ANDROID
+        if (!FileUtil::IsDirectory(new_path)) {
+            LOG_ERROR(Common_Filesystem, "Invalid path specified {}", new_path);
+            return "";
+        }
+
+        user_path = new_path + DIR_SEP;
+        paths.emplace(UserPath::ConfigDir, user_path + CONFIG_DIR DIR_SEP);
+        paths.emplace(UserPath::CacheDir, user_path + CACHE_DIR DIR_SEP);
 #else
         if (FileUtil::Exists(ROOT_DIR DIR_SEP USERDATA_DIR)) {
             user_path = ROOT_DIR DIR_SEP USERDATA_DIR DIR_SEP;
@@ -713,6 +722,7 @@ const std::string& GetUserPath(UserPath path, const std::string& new_path) {
         paths.emplace(UserPath::CheatsDir, user_path + CHEATS_DIR DIR_SEP);
     }
 
+#ifndef ANDROID
     if (!new_path.empty()) {
         if (!FileUtil::IsDirectory(new_path)) {
             LOG_ERROR(Common_Filesystem, "Invalid path specified {}", new_path);
@@ -735,6 +745,7 @@ const std::string& GetUserPath(UserPath path, const std::string& new_path) {
             break;
         }
     }
+#endif ANDROID
 
     return paths[path];
 }
