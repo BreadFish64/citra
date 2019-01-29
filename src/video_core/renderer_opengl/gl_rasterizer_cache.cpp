@@ -24,12 +24,22 @@
 #include "common/vector_math.h"
 #include "core/frontend/emu_window.h"
 #include "core/memory.h"
+#include "renderer_opengl.h"
 #include "video_core/pica_state.h"
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/utils.h"
 #include "video_core/video_core.h"
+
+// Since GLES dosent support GL_UNSIGNED_INT_8_8_8_8 or GL_BGR , this will convert them to
+// GL_UNSIGNED_BYTE and GL_RGB respectively.
+#ifdef ANDROID
+#undef GL_UNSIGNED_INT_8_8_8_8
+#define GL_UNSIGNED_INT_8_8_8_8 GL_UNSIGNED_BYTE
+#undef GL_BGR
+#define GL_BGR GL_RGB
+#endif
 
 namespace OpenGL {
 
@@ -70,6 +80,81 @@ static const FormatTuple& GetFormatTuple(PixelFormat pixel_format) {
         return depth_format_tuples[tuple_idx];
     }
     return tex_tuple;
+}
+
+/**
+ * OpenGL ES does not support glGetTexImage. Obtain the pixels by attaching the
+ * texture to a framebuffer.
+ * Originally authored by afrantzis for apitrace
+ */
+static inline void getTexImageOES(GLenum target, GLint level, GLint height, GLint width,
+                                  GLubyte* pixels) {
+    LOG_INFO(Render_OpenGL, "GLES getTexImageOES Workaround");
+
+    GLint depth = 1; // Since we are only using this for 2D lets ignore the 3D aspect
+    memset(pixels, 0x80, height * width * 4);
+
+    GLenum texture_binding = GL_NONE;
+    switch (target) {
+    case GL_TEXTURE_2D:
+        texture_binding = GL_TEXTURE_BINDING_2D;
+        break;
+    case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
+    case GL_TEXTURE_CUBE_MAP_NEGATIVE_X:
+    case GL_TEXTURE_CUBE_MAP_POSITIVE_Y:
+    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
+    case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
+    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
+        texture_binding = GL_TEXTURE_BINDING_CUBE_MAP;
+        break;
+    case GL_TEXTURE_3D_OES:
+        texture_binding = GL_TEXTURE_BINDING_3D_OES;
+    default:
+        return;
+    }
+
+    GLint texture = 0;
+    glGetIntegerv(texture_binding, &texture);
+    if (!texture) {
+        return;
+    }
+
+    GLint prev_fbo = 0;
+    GLuint fbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev_fbo);
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    GLenum status;
+
+    switch (target) {
+    case GL_TEXTURE_2D:
+    case GL_TEXTURE_CUBE_MAP_POSITIVE_X:
+    case GL_TEXTURE_CUBE_MAP_NEGATIVE_X:
+    case GL_TEXTURE_CUBE_MAP_POSITIVE_Y:
+    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Y:
+    case GL_TEXTURE_CUBE_MAP_POSITIVE_Z:
+    case GL_TEXTURE_CUBE_MAP_NEGATIVE_Z:
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, level);
+        status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            LOG_ERROR(Render_OpenGL, "%s", status);
+        }
+        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        break;
+    case GL_TEXTURE_3D_OES:
+        for (int i = 0; i < depth; i++) {
+            glFramebufferTexture3D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, texture,
+                                   level, i);
+            glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE,
+                         pixels + 4 * i * width * height);
+        }
+        break;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, prev_fbo);
+
+    glDeleteFramebuffers(1, &fbo);
 }
 
 template <typename Map, typename Interval>
@@ -1643,7 +1728,8 @@ void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface
             const auto interval = cached_surface->GetInterval() & invalid_interval;
             cached_surface->invalid_regions.insert(interval);
 
-            // Remove only "empty" fill surfaces to avoid destroying and recreating OGL textures
+            // Remove only "empty" fill surfaces to avoid destroying and recreating OGL
+            // textures
             if (cached_surface->type == SurfaceType::Fill &&
                 cached_surface->IsSurfaceFullyInvalid()) {
                 remove_surfaces.emplace(cached_surface);
@@ -1712,8 +1798,8 @@ void RasterizerCacheOpenGL::UpdatePagesCachedCount(PAddr addr, u32 size, int del
     const u32 page_start = addr >> Memory::PAGE_BITS;
     const u32 page_end = page_start + num_pages;
 
-    // Interval maps will erase segments if count reaches 0, so if delta is negative we have to
-    // subtract after iterating
+    // Interval maps will erase segments if count reaches 0, so if delta is negative we have
+    // to subtract after iterating
     const auto pages_interval = PageMap::interval_type::right_open(page_start, page_end);
     if (delta > 0)
         cached_pages.add({pages_interval, delta});

@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <string>
 #include <vector>
 #include <glad/glad.h>
 #include "common/assert.h"
@@ -95,4 +96,25 @@ GLuint LoadProgram(bool separable_program, const std::vector<GLuint>& shaders) {
     return program_id;
 }
 
+std::string GetGLSLVersionString() {
+    std::string ver;
+    if (GLAD_GL_ES_VERSION_3_2)
+        ver = "#version 320 es\n";
+    else if (GLAD_GL_ES_VERSION_3_1)
+        ver = "#version 310 es\n";
+    else if (GLAD_GL_ES_VERSION_3_0)
+        ver = "#version 300 es\n";
+    else if (GLAD_GL_VERSION_3_3)
+        ver = "#version 330\n";
+    else if (GLAD_GL_VERSION_3_2)
+        ver = "#version 150\n";
+    else if (GLAD_GL_VERSION_3_1)
+        ver = "#version 140\n";
+
+    // Lower versions arent supported
+    else
+        ver = "#version ERROR\n";
+
+    return ver;
+}
 } // namespace OpenGL
