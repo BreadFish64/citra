@@ -7,6 +7,9 @@
 #include <thread>
 #include <glad/glad.h>
 #define QT_NO_OPENGL
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <QDesktopWidget>
 #include <QFileDialog>
 #include <QFutureWatcher>
@@ -1571,12 +1574,27 @@ void GMainWindow::OnCaptureScreenshot() {
 }
 
 void GMainWindow::UpdateStatusBar() {
+    static FileUtil::IOFile file;
+
     if (emu_thread == nullptr) {
         status_bar_update_timer.stop();
+        file.Close();
         return;
     }
 
+    if (!file.IsOpen()) {
+        std::stringstream path;
+        path << FileUtil::GetUserPath(FileUtil::UserPath::LogDir) << game_title.toStdString()
+             << " ";
+        auto now = std::chrono::system_clock::now();
+        auto in_time_t = std::chrono::system_clock::to_time_t(now);
+        path << std::put_time(std::localtime(&in_time_t), "%F %H-%M-%S") << ".tsv";
+        file.Open(path.str(), "a");
+    }
+
     auto results = Core::System::GetInstance().GetAndResetPerfStats();
+
+    file.WriteString(std::to_string(results.frametime) + '\n');
 
     if (Settings::values.use_frame_limit) {
         emu_speed_label->setText(tr("Speed: %1% / %2%")
