@@ -156,6 +156,7 @@
     </widget>
     <addaction name="menu_Movie"/>
     <addaction name="menu_Frame_Advance"/>
+    <addaction name="action_Record_Frame_Times"/>
     <addaction name="separator"/>
     <addaction name="action_Capture_Screenshot"/>
    </widget>
@@ -472,6 +473,17 @@
   <action name="action_Open_Citra_Folder">
    <property name="text">
     <string>Open Citra Folder</string>
+   </property>
+  </action>
+  <action name="action_Record_Frame_Times">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Record Frame Times</string>
+   </property>
+   <property name="toolTip">
+    <string>Frame time data can be found in the log folder</string>
    </property>
   </action>
  </widget>

@@ -192,6 +192,8 @@ void GMainWindow::InitializeWidgets() {
 #ifdef CITRA_ENABLE_COMPATIBILITY_REPORTING
     ui.action_Report_Compatibility->setVisible(true);
 #endif
+    ui.action_Record_Frame_Times->setChecked(Settings::values.record_frame_times);
+
     render_window = new GRenderWindow(this, emu_thread.get());
     render_window->hide();
 
@@ -573,11 +575,14 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui.action_Screen_Layout_Swap_Screens, &QAction::triggered, this,
             &GMainWindow::OnSwapScreens);
 
-    // Movie
+    // Tools
     connect(ui.action_Record_Movie, &QAction::triggered, this, &GMainWindow::OnRecordMovie);
     connect(ui.action_Play_Movie, &QAction::triggered, this, &GMainWindow::OnPlayMovie);
     connect(ui.action_Stop_Recording_Playback, &QAction::triggered, this,
             &GMainWindow::OnStopRecordingPlayback);
+    connect(ui.action_Record_Frame_Times, &QAction::triggered, this, [this] {
+        Settings::values.record_frame_times = ui.action_Record_Frame_Times->isChecked();
+    });
     connect(ui.action_Enable_Frame_Advancing, &QAction::triggered, this, [this] {
         if (emulation_running) {
             Core::System::GetInstance().frame_limiter.SetFrameAdvancing(
