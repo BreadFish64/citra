@@ -7,10 +7,13 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <optional>
+#include <sstream>
 #include "common/common_types.h"
 #include "common/thread.h"
 
 namespace Core {
+class System;
 
 /**
  * Class to manage and query performance/timing statistics. All public functions of this class are
@@ -18,7 +21,11 @@ namespace Core {
  */
 class PerfStats {
 public:
+    explicit PerfStats(System& system);
+    ~PerfStats();
+
     using Clock = std::chrono::high_resolution_clock;
+    using DoubleSecs = std::chrono::duration<double, std::chrono::seconds::period>;
 
     struct Results {
         /// System FPS (LCD VBlanks) in Hz
@@ -43,8 +50,15 @@ public:
      */
     double GetLastFrameTimeScale();
 
+    /// Write frame data to disk asynchronously
+    void FlushFrameData();
+
 private:
+    System& system;
+
     std::mutex object_mutex;
+
+    std::optional<std::ostringstream> frame_data;
 
     /// Point when the cumulative counters were reset
     Clock::time_point reset_point = Clock::now();
@@ -64,6 +78,8 @@ private:
     Clock::time_point frame_begin = reset_point;
     /// Total visible duration (including frame-limiting, etc.) of the previous system frame
     Clock::duration previous_frame_length = Clock::duration::zero();
+
+    void RecordFrameTime(DoubleSecs frame_time);
 };
 
 class FrameLimiter {

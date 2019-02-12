@@ -6,16 +6,23 @@
 #include <chrono>
 #include <mutex>
 #include <thread>
+#include "common/detached_tasks.h"
+#include "common/file_util.h"
+#include "core/core.h"
 #include "core/hw/gpu.h"
 #include "core/perf_stats.h"
 #include "core/settings.h"
+#include "fmt/time.h"
 
 using namespace std::chrono_literals;
-using DoubleSecs = std::chrono::duration<double, std::chrono::seconds::period>;
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
 
 namespace Core {
+
+PerfStats::PerfStats(System& system) : system{system} {}
+
+PerfStats::~PerfStats() = default;
 
 void PerfStats::BeginSystemFrame() {
     std::lock_guard<std::mutex> lock(object_mutex);
@@ -32,6 +39,12 @@ void PerfStats::EndSystemFrame() {
 
     previous_frame_length = frame_end - previous_frame_end;
     previous_frame_end = frame_end;
+
+    if (Settings::values.record_frame_times) {
+        PerfStats::RecordFrameTime(duration_cast<DoubleSecs>(previous_frame_length));
+    } else if (frame_data) {
+        FlushFrameData();
+    }
 }
 
 void PerfStats::EndGameFrame() {
@@ -71,6 +84,29 @@ double PerfStats::GetLastFrameTimeScale() {
 
     constexpr double FRAME_LENGTH = 1.0 / GPU::SCREEN_REFRESH_RATE;
     return duration_cast<DoubleSecs>(previous_frame_length).count() / FRAME_LENGTH;
+}
+
+void PerfStats::RecordFrameTime(DoubleSecs frame_time) {
+    if (!frame_data)
+        frame_data.emplace();
+    *frame_data << frame_time.count() << '\n';
+}
+
+void PerfStats::FlushFrameData() {
+    if (!frame_data)
+        return;
+
+    std::string game_title;
+    system.GetAppLoader().ReadTitle(game_title);
+
+    Common::DetachedTasks::AddTask([game_title, data = frame_data->str()]() {
+        std::string path = FileUtil::GetUserPath(FileUtil::UserPath::LogDir) + game_title +
+                           fmt::format(" {:%F %H-%M-%S}.csv", fmt::localtime(std::time(nullptr)));
+        // file path is "log/<game title> <date> <time stamp>.csv"
+        FileUtil::WriteStringToFile(true, data, path.data());
+    });
+
+    frame_data.reset();
 }
 
 void FrameLimiter::DoFrameLimiting(microseconds current_system_time_us) {

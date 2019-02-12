@@ -176,6 +176,7 @@ struct Values {
     // Debugging
     bool use_gdbstub;
     u16 gdbstub_port;
+    std::atomic_bool record_frame_times;
     std::string log_filter;
     std::unordered_map<std::string, bool> lle_modules;
 
