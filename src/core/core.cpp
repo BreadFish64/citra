@@ -36,6 +36,8 @@ namespace Core {
 
 /*static*/ System System::s_instance;
 
+System::System() : perf_stats(*this) {}
+
 System::ResultStatus System::RunLoop(bool tight_loop) {
     status = ResultStatus::Success;
     if (!cpu_core) {
@@ -279,6 +281,7 @@ void System::RegisterSoftwareKeyboard(std::shared_ptr<Frontend::SoftwareKeyboard
 }
 
 void System::Shutdown() {
+    perf_stats.FlushFrameData();
     // Log last frame performance stats
     auto perf_results = GetAndResetPerfStats();
     Telemetry().AddField(Telemetry::FieldType::Performance, "Shutdown_EmulationSpeed",

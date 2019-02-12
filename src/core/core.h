@@ -51,6 +51,8 @@ class Timing;
 
 class System {
 public:
+    explicit System();
+
     /**
      * Gets the instance of the System singleton class.
      * @returns Reference to the instance of the System singleton class.
