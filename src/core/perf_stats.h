@@ -8,7 +8,6 @@
 #include <chrono>
 #include <mutex>
 #include <optional>
-#include <sstream>
 #include "common/common_types.h"
 #include "common/thread.h"
 
@@ -58,7 +57,7 @@ private:
 
     std::mutex object_mutex;
 
-    std::optional<std::ostringstream> frame_data;
+    std::optional<std::vector<double>> frame_data;
 
     /// Point when the cumulative counters were reset
     Clock::time_point reset_point = Clock::now();
@@ -79,7 +78,7 @@ private:
     /// Total visible duration (including frame-limiting, etc.) of the previous system frame
     Clock::duration previous_frame_length = Clock::duration::zero();
 
-    void RecordFrameTime(DoubleSecs frame_time);
+    inline void RecordFrameTime(DoubleSecs frame_time);
 };
 
 class FrameLimiter {

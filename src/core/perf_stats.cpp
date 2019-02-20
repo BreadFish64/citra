@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <fstream>
 #include <mutex>
 #include <thread>
 #include "common/detached_tasks.h"
@@ -41,8 +42,8 @@ void PerfStats::EndSystemFrame() {
     previous_frame_end = frame_end;
 
     if (Settings::values.record_frame_times) {
-        PerfStats::RecordFrameTime(duration_cast<DoubleSecs>(previous_frame_length));
-    } else if (frame_data) {
+        RecordFrameTime(duration_cast<DoubleSecs>(previous_frame_length));
+    } else {
         FlushFrameData();
     }
 }
@@ -86,10 +87,10 @@ double PerfStats::GetLastFrameTimeScale() {
     return duration_cast<DoubleSecs>(previous_frame_length).count() / FRAME_LENGTH;
 }
 
-void PerfStats::RecordFrameTime(DoubleSecs frame_time) {
+inline void PerfStats::RecordFrameTime(DoubleSecs frame_time) {
     if (!frame_data)
         frame_data.emplace();
-    *frame_data << frame_time.count() << '\n';
+    frame_data->push_back(frame_time.count());
 }
 
 void PerfStats::FlushFrameData() {
@@ -99,11 +100,14 @@ void PerfStats::FlushFrameData() {
     std::string game_title;
     system.GetAppLoader().ReadTitle(game_title);
 
-    Common::DetachedTasks::AddTask([game_title, data = frame_data->str()]() {
+    Common::DetachedTasks::AddTask([game_title, data = std::move(*frame_data)]() {
+        // file path is "log/<game title> <date> <time stamp>.csv"
         std::string path = FileUtil::GetUserPath(FileUtil::UserPath::LogDir) + game_title +
                            fmt::format(" {:%F %H-%M-%S}.csv", fmt::localtime(std::time(nullptr)));
-        // file path is "log/<game title> <date> <time stamp>.csv"
-        FileUtil::WriteStringToFile(true, data, path.data());
+
+        std::ofstream file;
+        OpenFStream(file, path, std::ofstream::out);
+        std::copy(data.begin(), data.end(), std::ostream_iterator<double>(file, "\n"));
     });
 
     frame_data.reset();
