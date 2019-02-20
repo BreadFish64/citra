@@ -76,6 +76,7 @@ deploy:
   file: "artifacts/*"
   on:
     repo: BreadFish64/citra
+    all_branches: true
 notifications:
   webhooks:
     urls:
