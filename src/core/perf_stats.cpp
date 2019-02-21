@@ -13,7 +13,6 @@
 #include "core/hw/gpu.h"
 #include "core/perf_stats.h"
 #include "core/settings.h"
-#include "fmt/time.h"
 
 using namespace std::chrono_literals;
 using std::chrono::duration_cast;
@@ -101,9 +100,12 @@ void PerfStats::FlushFrameData() {
     system.GetAppLoader().ReadTitle(game_title);
 
     Common::DetachedTasks::AddTask([game_title, data = std::move(*frame_data)]() {
-        // file path is "log/<game title> <date> <time stamp>.csv"
-        std::string path = FileUtil::GetUserPath(FileUtil::UserPath::LogDir) + game_title +
-                           fmt::format(" {:%F %H-%M-%S}.csv", fmt::localtime(std::time(nullptr)));
+        // file path is "log/<game title> <version>.csv"
+        std::string path = FileUtil::GetUserPath(FileUtil::UserPath::LogDir) + game_title;
+        unsigned int i = 1;
+        while (FileUtil::Exists(path + ' ' + std::to_string(i) + ".csv"))
+            ++i;
+        path += ' ' + std::to_string(i) + ".csv";
 
         std::ofstream file;
         OpenFStream(file, path, std::ofstream::out);
