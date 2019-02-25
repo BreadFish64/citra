@@ -6,6 +6,7 @@
 #include <chrono>
 #include <fstream>
 #include <mutex>
+#include <regex>
 #include <thread>
 #include "common/detached_tasks.h"
 #include "common/file_util.h"
@@ -100,8 +101,10 @@ void PerfStats::FlushFrameData() {
     system.GetAppLoader().ReadTitle(game_title);
 
     Common::DetachedTasks::AddTask([game_title, data = std::move(*frame_data)]() {
+        static const std::regex invalid_chars(R"([\\/:"*?<>|])");
         // file path is "log/<game title> <version>.csv"
-        std::string path = FileUtil::GetUserPath(FileUtil::UserPath::LogDir) + game_title;
+        std::string path = FileUtil::GetUserPath(FileUtil::UserPath::LogDir) +
+                           std::regex_replace(game_title, invalid_chars, "");
         unsigned int i = 1;
         while (FileUtil::Exists(path + ' ' + std::to_string(i) + ".csv"))
             ++i;
