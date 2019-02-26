@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <mutex>
 #include <optional>
 #include "common/common_types.h"
@@ -57,7 +58,7 @@ private:
 
     std::mutex object_mutex;
 
-    std::optional<std::vector<double>> frame_data;
+    std::optional<std::deque<double>> frame_data;
 
     /// Point when the cumulative counters were reset
     Clock::time_point reset_point = Clock::now();
