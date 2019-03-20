@@ -7,9 +7,9 @@ package org.citra_emu.citra.ui.main;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.support.annotation.NonNull;
-import android.support.v7.app.AlertDialog;
-import android.support.v7.app.AppCompatActivity;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
 
 import org.citra_emu.citra.R;
 import org.citra_emu.citra.utils.FileUtil;
