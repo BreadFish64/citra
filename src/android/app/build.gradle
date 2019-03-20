@@ -55,7 +55,7 @@ android {
 
     externalNativeBuild {
         cmake {
-            version getCmakeVersion()
+            version "3.8.0+"
             path "../../../CMakeLists.txt"
         }
     }
@@ -121,20 +121,4 @@ def getBuildVersionCode() {
     }
 
     return 0
-}
-
-def getCmakeVersion() {
-    try {
-        // Tokenized form of the output will be - ["cmake", "version", "M.m.p-rcx"], the version number
-        // will be at index 2
-        def version_string = 'cmake -version'.execute([], project.rootDir).text
-                .trim().tokenize()[2]
-
-        return version_string
-    }
-    catch(Exception e) {
-        logger.error('Cannot find Cmake, using default Cmake')
-    }
-
-    return null
 }
