@@ -335,21 +335,16 @@ std::unique_ptr<GraphicsContext> GRenderWindow::CreateSharedContext() const {
 }
 
 void GRenderWindow::InitRenderTarget() {
-    if (shared_context) {
-        shared_context.reset();
-    }
+    shared_context.reset();
+    context.reset();
 
-    if (context) {
-        context.reset();
-    }
+    delete child;
+    child = nullptr;
 
-    if (child) {
-        delete child;
-    }
+    delete container;
+    container = nullptr;
 
-    if (layout()) {
-        delete layout();
-    }
+    delete layout();
 
     // TODO: One of these flags might be interesting: WA_OpaquePaintEvent, WA_NoBackground,
     // WA_DontShowOnScreen, WA_DeleteOnClose
@@ -368,7 +363,7 @@ void GRenderWindow::InitRenderTarget() {
     fmt.setSwapInterval(Settings::values.vsync_enabled);
 
     child = new GGLWidgetInternal(this, shared_context.get());
-    QWidget* container = QWidget::createWindowContainer(child, this);
+    container = QWidget::createWindowContainer(child, this);
     QBoxLayout* layout = new QHBoxLayout(this);
 
     resize(Core::kScreenTopWidth, Core::kScreenTopHeight + Core::kScreenBottomHeight);
