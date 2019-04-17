@@ -179,7 +179,7 @@ private:
 };
 
 GRenderWindow::GRenderWindow(QWidget* parent, EmuThread* emu_thread)
-    : QWidget(parent), child(nullptr), context(nullptr), emu_thread(emu_thread) {
+    : QWidget(parent), emu_thread(emu_thread) {
 
     setWindowTitle(QStringLiteral("Citra %1 | %2-%3")
                        .arg(Common::g_build_name, Common::g_scm_branch, Common::g_scm_desc));
