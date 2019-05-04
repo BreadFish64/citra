@@ -82,7 +82,7 @@ void EmuThread::run() {
     render_window->moveContext();
 }
 
-class GGLContext : public GraphicsContext {
+class GGLContext : public Frontend::GraphicsContext {
 public:
     explicit GGLContext(QOpenGLContext* shared_context)
         : context{std::make_unique<QOpenGLContext>(shared_context)} {
@@ -343,7 +343,7 @@ void GRenderWindow::OnClientAreaResized(unsigned width, unsigned height) {
     NotifyClientAreaSizeChanged(std::make_pair(width, height));
 }
 
-std::unique_ptr<GraphicsContext> GRenderWindow::CreateSharedContext() const {
+std::unique_ptr<Frontend::GraphicsContext> GRenderWindow::CreateSharedContext() const {
     return std::make_unique<GGLContext>(shared_context.get());
 }
 

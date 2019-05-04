@@ -116,7 +116,7 @@ public:
     void MakeCurrent() override;
     void DoneCurrent() override;
     void PollEvents() override;
-    std::unique_ptr<GraphicsContext> CreateSharedContext() const override;
+    std::unique_ptr<Frontend::GraphicsContext> CreateSharedContext() const override;
 
     void ForwardKeyPressEvent(QKeyEvent* event);
     void ForwardKeyReleaseEvent(QKeyEvent* event);

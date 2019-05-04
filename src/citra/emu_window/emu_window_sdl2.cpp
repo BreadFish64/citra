@@ -20,7 +20,7 @@
 #include "input_common/sdl/sdl.h"
 #include "network/network.h"
 
-class SDLGLContext : public GraphicsContext {
+class SDLGLContext : public Frontend::GraphicsContext {
 public:
     explicit SDLGLContext() {
         // create a hidden window to make the shared context against
@@ -290,6 +290,6 @@ void EmuWindow_SDL2::OnMinimalClientAreaChangeRequest(
     SDL_SetWindowMinimumSize(render_window, minimal_size.first, minimal_size.second);
 }
 
-std::unique_ptr<GraphicsContext> EmuWindow_SDL2::CreateSharedContext() const {
+std::unique_ptr<Frontend::GraphicsContext> EmuWindow_SDL2::CreateSharedContext() const {
     return std::make_unique<SDLGLContext>();
 }
