@@ -82,15 +82,14 @@ ext {
 }
 
 dependencies {
-    implementation "androidx.legacy:legacy-support-v13:$androidXVersion"
-    implementation "androidx.cardview:cardview:$androidXVersion"
-    implementation "androidx.recyclerview:recyclerview:$androidXVersion"
     implementation "com.google.android.material:material:$androidXVersion"
+    implementation "androidx.preference:preference:$androidXVersion"
+    implementation "androidx.constraintlayout:constraintlayout:1.1.3"
+    implementation "androidx.appcompat:appcompat:1.0.2"
+    implementation "androidx.viewpager:viewpager:$androidXVersion"
 
     // Android TV UI libraries.
     implementation "androidx.leanback:leanback:$androidXVersion"
-
-    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
 
     testImplementation 'androidx.test:runner:1.1.1'
     androidTestImplementation 'androidx.test:runner:1.1.1'
