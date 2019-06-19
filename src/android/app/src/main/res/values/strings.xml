@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ Copyright 2019 Citra Emulator Project
+  ~ Licensed under GPLv2 or any later version
+  ~ Refer to the license.txt file included.
+  -->
+
+<resources>
+    <string name="citra">Citra</string>
+    <string name="limit_speed">Limit Speed</string>
+    <string name="max_speed">Max Speed %</string>
+    <string name="enable_hardware_renderer">Enable Hardware Renderer</string>
+    <string name="enable_hardware_shaders">Enable Hardware Shaders</string>
+    <string name="accurate_geometry_shaders">Accurate Geometry Shaders</string>
+    <string name="accurate_multiplication">Accurate Multiplication</string>
+    <string name="general">General</string>
+    <string name="layout">Layout</string>
+    <string name="renderer">Renderer</string>
+    <string-array name="layout_names">
+        <item><string name="_default">Default</string></item>
+        <item><string name="single_screen">Single Screen</string></item>
+        <item><string name="large_screen">Large Screen</string></item>
+        <item><string name="side_by_side">Side by Side</string></item>
+    </string-array>
+    <string-array name="scale_factors">
+        <item><string name="auto_scale">Auto (Screen Size)</string></item>
+        <item><string name="1x_scale">Native (400x240)</string></item>
+        <item><string name="2x_scale">2x Native (800x480)</string></item>
+        <item><string name="3x_scale">3x Native (1200x720)</string></item>
+        <item><string name="4x_scale">4x Native (1600x960)</string></item>
+        <item><string name="5x_scale">5x Native (2000x1200)</string></item>
+        <item><string name="6x_scale">6x Native (2400x1440)</string></item>
+        <item><string name="7x_scale">7x Native (2800x1680)</string></item>
+        <item><string name="8x_scale">8x Native (3200x1920)</string></item>
+        <item><string name="9x_scale">9x Native (3600x2160)</string></item>
+        <item><string name="10x_scale">10x Native (4000x2400)</string></item>
+    </string-array>
+    <string name="swap_screens">Swap Screens</string>
+    <string name="resolution_scale_factor">Resolution Scale Factor</string>
+    <string name="graphics">Graphics</string>
+    <string name="settings">Settings</string>
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+</resources>

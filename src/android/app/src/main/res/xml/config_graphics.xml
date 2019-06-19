@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ Copyright 2019 Citra Emulator Project
+  ~ Licensed under GPLv2 or any later version
+  ~ Refer to the license.txt file included.
+  -->
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    android:title="@string/graphics">
+    <PreferenceCategory android:title="@string/general">
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="use_frame_limit"
+            android:theme="@style/CitraBase"
+            android:title="@string/limit_speed" />
+
+        <EditTextPreference
+            android:defaultValue="100"
+            android:dependency="use_frame_limit"
+            android:key="frame_limit"
+            android:selectAllOnFocus="true"
+            android:title="@string/max_speed"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/renderer">
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="use_hw_renderer"
+            android:title="@string/enable_hardware_renderer" />
+
+        <ListPreference
+            android:defaultValue="0"
+            android:dependency="use_hw_renderer"
+            android:entries="@array/scale_factors"
+            android:key="resolution_factor"
+            android:title="@string/resolution_scale_factor"
+            android:summary="%s"/>/>
+
+        <SwitchPreference
+            android:defaultValue="true"
+            android:dependency="use_hw_renderer"
+            android:key="use_hw_shader"
+            android:title="@string/enable_hardware_shaders" />
+
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:dependency="use_hw_shader"
+            android:key="shaders_accurate_gs"
+            android:title="@string/accurate_geometry_shaders" />
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:dependency="use_hw_shader"
+            android:key="shaders_accurate_mul"
+            android:title="@string/accurate_multiplication" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/layout">
+        <ListPreference
+            android:defaultValue="0"
+            android:entries="@array/layout_names"
+            android:key="layout_option"
+            android:title="@string/layout"
+            android:summary="%s"/>/>
+
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="swap_screens"
+            android:title="@string/swap_screens" />
+    </PreferenceCategory>
+</PreferenceScreen>

@@ -7,7 +7,24 @@ package org.citra_emu.citra;
 import android.app.Application;
 
 public class CitraApplication extends Application {
-    static {
+
+    private static CitraApplication application;
+
+    public static CitraApplication getApplication() {
+        return application;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
         System.loadLibrary("citra-android");
+        application = test(this);
+    }
+
+    public static native CitraApplication test(CitraApplication app);
+
+    public static CitraApplication test(){
+        return getApplication();
     }
 }
