@@ -1399,7 +1399,7 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
     auto surface = GetSurface(params, ScaleMatch::Ignore, true);
 
     // Update mipmap if necessary
-    if (max_level != 0) {
+    if (/*max_level != 0*/ false) {
         if (max_level >= 8) {
             // since PICA only supports texture size between 8 and 1024, there are at most eight
             // possible mipmap levels including the base.
