@@ -29,6 +29,7 @@
 #include "core/hw/gpu.h"
 #include "video_core/regs_framebuffer.h"
 #include "video_core/regs_texturing.h"
+#include "video_core/renderer_opengl/gl_format_converter.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/texture/texture_decode.h"
 
@@ -128,34 +129,6 @@ private:
     };
 
 public:
-    enum class PixelFormat {
-        // First 5 formats are shared between textures and color buffers
-        RGBA8 = 0,
-        RGB8 = 1,
-        RGB5A1 = 2,
-        RGB565 = 3,
-        RGBA4 = 4,
-
-        // Texture-only formats
-        IA8 = 5,
-        RG8 = 6,
-        I8 = 7,
-        A8 = 8,
-        IA4 = 9,
-        I4 = 10,
-        A4 = 11,
-        ETC1 = 12,
-        ETC1A4 = 13,
-
-        // Depth buffer-only formats
-        D16 = 14,
-        // gap
-        D24 = 16,
-        D24S8 = 17,
-
-        Invalid = 255,
-    };
-
     enum class SurfaceType {
         Color = 0,
         Texture = 1,
@@ -445,9 +418,6 @@ public:
     bool BlitSurfaces(const Surface& src_surface, const Common::Rectangle<u32>& src_rect,
                       const Surface& dst_surface, const Common::Rectangle<u32>& dst_rect);
 
-    void ConvertD24S8toABGR(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint dst_tex,
-                            const Common::Rectangle<u32>& dst_rect);
-
     /// Copy one surface's region to another
     void CopySurface(const Surface& src_surface, const Surface& dst_surface,
                      SurfaceInterval copy_interval);
@@ -512,13 +482,7 @@ private:
 
     OGLFramebuffer read_framebuffer;
     OGLFramebuffer draw_framebuffer;
-
-    OGLVertexArray attributeless_vao;
-    OGLBuffer d24s8_abgr_buffer;
-    GLsizeiptr d24s8_abgr_buffer_size;
-    OGLProgram d24s8_abgr_shader;
-    GLint d24s8_abgr_tbo_size_u_id;
-    GLint d24s8_abgr_viewport_u_id;
+    FormatConverterOpenGL format_converter;
 
     std::unordered_map<TextureCubeConfig, CachedTextureCube> texture_cube_cache;
 };
