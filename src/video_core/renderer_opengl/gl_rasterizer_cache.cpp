@@ -1866,7 +1866,7 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         }
 
         // Could not find a matching converter, check if we need to implement a converter
-        static const std::array all_formats{
+        static const std::array<PixelFormat, 17> all_formats{
             PixelFormat::RGBA8, PixelFormat::RGB8,   PixelFormat::RGB5A1, PixelFormat::RGB565,
             PixelFormat::RGBA4, PixelFormat::IA8,    PixelFormat::RG8,    PixelFormat::I8,
             PixelFormat::A8,    PixelFormat::IA4,    PixelFormat::I4,     PixelFormat::A4,
