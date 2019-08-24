@@ -1219,6 +1219,45 @@ Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params
     return match_surface;
 }
 
+static const char* PixelFormatAsString(PixelFormat format) {
+    switch (format) {
+    case PixelFormat::RGBA8:
+        return "RGBA8";
+    case PixelFormat::RGB8:
+        return "RGB8";
+    case PixelFormat::RGB5A1:
+        return "RGB5A1";
+    case PixelFormat::RGB565:
+        return "RGB565";
+    case PixelFormat::RGBA4:
+        return "RGBA4";
+    case PixelFormat::IA8:
+        return "IA8";
+    case PixelFormat::I8:
+        return "I8";
+    case PixelFormat::A8:
+        return "A8";
+    case PixelFormat::IA4:
+        return "IA4";
+    case PixelFormat::I4:
+        return "I4";
+    case PixelFormat::A4:
+        return "A4";
+    case PixelFormat::ETC1:
+        return "ETC1";
+    case PixelFormat::ETC1A4:
+        return "ETC1A4";
+    case PixelFormat::D16:
+        return "D16";
+    case PixelFormat::D24:
+        return "D24";
+    case PixelFormat::D24S8:
+        return "D24S8";
+    default:
+        return "Not a real pixel format";
+    }
+}
+
 RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
     read_framebuffer.Create();
     draw_framebuffer.Create();
@@ -1824,6 +1863,23 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         }
         if (retry) {
             continue;
+        }
+
+        // Could not find a matching converter, check if we need to implement a converter
+        static const std::array all_formats{
+            PixelFormat::RGBA8, PixelFormat::RGB8,   PixelFormat::RGB5A1, PixelFormat::RGB565,
+            PixelFormat::RGBA4, PixelFormat::IA8,    PixelFormat::RG8,    PixelFormat::I8,
+            PixelFormat::A8,    PixelFormat::IA4,    PixelFormat::I4,     PixelFormat::A4,
+            PixelFormat::ETC1,  PixelFormat::ETC1A4, PixelFormat::D16,    PixelFormat::D24,
+            PixelFormat::D24S8};
+        for (PixelFormat format : all_formats) {
+            params.pixel_format = format;
+            Surface test_surface =
+                FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
+            if (test_surface != nullptr) {
+                LOG_ERROR(Render_OpenGL, "Missing converter: {} -> {}", PixelFormatAsString(format),
+                          PixelFormatAsString(surface->pixel_format));
+            }
         }
 
         // Load data from 3DS memory
