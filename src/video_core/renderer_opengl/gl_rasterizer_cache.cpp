@@ -1233,6 +1233,8 @@ static const char* PixelFormatAsString(PixelFormat format) {
         return "RGBA4";
     case PixelFormat::IA8:
         return "IA8";
+    case PixelFormat::RG8:
+        return "RG8";
     case PixelFormat::I8:
         return "I8";
     case PixelFormat::A8:
@@ -1866,11 +1868,22 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         }
 
         // Could not find a matching converter, check if we need to implement a converter
-        static const std::array<PixelFormat, 17> all_formats{
-            PixelFormat::RGBA8, PixelFormat::RGB8,   PixelFormat::RGB5A1, PixelFormat::RGB565,
-            PixelFormat::RGBA4, PixelFormat::IA8,    PixelFormat::RG8,    PixelFormat::I8,
-            PixelFormat::A8,    PixelFormat::IA4,    PixelFormat::I4,     PixelFormat::A4,
-            PixelFormat::ETC1,  PixelFormat::ETC1A4, PixelFormat::D16,    PixelFormat::D24,
+        // Skip I4, A4, and ETC1 because GetFormatBpp < 8 which will result in a crash
+        static const std::array<PixelFormat, 14> all_formats{
+            PixelFormat::RGBA8,
+            PixelFormat::RGB8,
+            PixelFormat::RGB5A1,
+            PixelFormat::RGB565,
+            PixelFormat::RGBA4,
+            PixelFormat::IA8,
+            PixelFormat::RG8,
+            PixelFormat::I8,
+            PixelFormat::A8,
+            PixelFormat::IA4,
+            /*PixelFormat::I4,*/ /*PixelFormat::A4,*/
+            /*PixelFormat::ETC1,*/ PixelFormat::ETC1A4,
+            PixelFormat::D16,
+            PixelFormat::D24,
             PixelFormat::D24S8};
         for (PixelFormat format : all_formats) {
             params.pixel_format = format;
