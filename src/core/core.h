@@ -7,8 +7,10 @@
 #include <memory>
 #include <string>
 #include "common/common_types.h"
+#include "core/custom_tex_cache.h"
 #include "core/frontend/applets/mii_selector.h"
 #include "core/frontend/applets/swkbd.h"
+#include "core/frontend/image_interface.h"
 #include "core/loader/loader.h"
 #include "core/memory.h"
 #include "core/perf_stats.h"
@@ -210,6 +212,12 @@ public:
     /// Gets a const reference to the cheat engine
     const Cheats::CheatEngine& CheatEngine() const;
 
+    /// Gets a reference to the custom texture cache system
+    Core::CustomTexCache& CustomTexCache();
+
+    /// Gets a const reference to the custom texture cache system
+    const Core::CustomTexCache& CustomTexCache() const;
+
     /// Gets a reference to the video dumper backend
     VideoDumper::Backend& VideoDumper();
 
@@ -246,6 +254,14 @@ public:
 
     std::shared_ptr<Frontend::SoftwareKeyboard> GetSoftwareKeyboard() const {
         return registered_swkbd;
+    }
+
+    /// Image interface
+
+    void RegisterImageInterface(std::shared_ptr<Frontend::ImageInterface> image_interface);
+
+    std::shared_ptr<Frontend::ImageInterface> GetImageInterface() const {
+        return registered_image_interface;
     }
 
 private:
@@ -285,6 +301,12 @@ private:
 
     /// Cheats manager
     std::unique_ptr<Cheats::CheatEngine> cheat_engine;
+
+    /// Custom texture cache system
+    std::unique_ptr<Core::CustomTexCache> custom_tex_cache;
+
+    /// Image interface
+    std::shared_ptr<Frontend::ImageInterface> registered_image_interface;
 
     /// Video dumper backend
     std::unique_ptr<VideoDumper::Backend> video_dumper;

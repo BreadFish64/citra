@@ -43,6 +43,8 @@
 #define LOG_DIR "log"
 #define CHEATS_DIR "cheats"
 #define DLL_DIR "external_dlls"
+#define DUMP_DIR "dump"
+#define LOAD_DIR "load"
 #define SHADER_DIR "shaders"
 
 // Filenames

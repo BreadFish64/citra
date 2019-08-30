@@ -8,6 +8,7 @@
 #include "audio_core/hle/hle.h"
 #include "audio_core/lle/lle.h"
 #include "common/logging/log.h"
+#include "common/texture.h"
 #include "core/arm/arm_interface.h"
 #ifdef ARCHITECTURE_x86_64
 #include "core/arm/dynarmic/arm_dynarmic.h"
@@ -16,6 +17,7 @@
 #include "core/cheats/cheats.h"
 #include "core/core.h"
 #include "core/core_timing.h"
+#include "core/custom_tex_cache.h"
 #include "core/dumping/backend.h"
 #ifdef ENABLE_FFMPEG_VIDEO_DUMPER
 #include "core/dumping/ffmpeg_backend.h"
@@ -146,12 +148,24 @@ System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::st
         }
     }
     cheat_engine = std::make_unique<Cheats::CheatEngine>(*this);
+
+    custom_tex_cache = std::make_unique<Core::CustomTexCache>();
+    if (Settings::values.custom_textures) {
+        FileUtil::CreateFullPath(fmt::format("{}textures/{:016X}/",
+                                             FileUtil::GetUserPath(FileUtil::UserPath::LoadDir),
+                                             Kernel().GetCurrentProcess()->codeset->program_id));
+        custom_tex_cache->FindCustomTextures();
+    }
+    if (Settings::values.preload_textures)
+        custom_tex_cache->PreloadTextures();
+
     u64 title_id{0};
     if (app_loader->ReadProgramId(title_id) != Loader::ResultStatus::Success) {
         LOG_ERROR(Core, "Failed to find title id for ROM (Error {})",
                   static_cast<u32>(load_result));
     }
     perf_stats = std::make_unique<PerfStats>(title_id);
+
     status = ResultStatus::Success;
     m_emu_window = &emu_window;
     m_filepath = filepath;
@@ -290,6 +304,14 @@ const Cheats::CheatEngine& System::CheatEngine() const {
     return *cheat_engine;
 }
 
+Core::CustomTexCache& System::CustomTexCache() {
+    return *custom_tex_cache;
+}
+
+const Core::CustomTexCache& System::CustomTexCache() const {
+    return *custom_tex_cache;
+}
+
 VideoDumper::Backend& System::VideoDumper() {
     return *video_dumper;
 }
@@ -304,6 +326,10 @@ void System::RegisterMiiSelector(std::shared_ptr<Frontend::MiiSelector> mii_sele
 
 void System::RegisterSoftwareKeyboard(std::shared_ptr<Frontend::SoftwareKeyboard> swkbd) {
     registered_swkbd = std::move(swkbd);
+}
+
+void System::RegisterImageInterface(std::shared_ptr<Frontend::ImageInterface> image_interface) {
+    registered_image_interface = std::move(image_interface);
 }
 
 void System::Shutdown() {

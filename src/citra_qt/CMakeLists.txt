@@ -46,6 +46,8 @@ add_executable(citra-qt
     configuration/configure_camera.ui
     configuration/configure_debug.cpp
     configuration/configure_debug.h
+    configuration/configure_enhancements.cpp
+    configuration/configure_enhancements.h
     configuration/configure_debug.ui
     configuration/configure_dialog.cpp
     configuration/configure_dialog.h
@@ -134,6 +136,8 @@ add_executable(citra-qt
     multiplayer/state.cpp
     multiplayer/state.h
     multiplayer/validation.h
+    qt_image_interface.cpp
+    qt_image_interface.h
     uisettings.cpp
     uisettings.h
     updater/updater.cpp
