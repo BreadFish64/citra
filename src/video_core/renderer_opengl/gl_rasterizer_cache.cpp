@@ -21,9 +21,14 @@
 #include "common/math_util.h"
 #include "common/microprofile.h"
 #include "common/scope_exit.h"
+#include "common/texture.h"
 #include "common/vector_math.h"
+#include "core/core.h"
+#include "core/custom_tex_cache.h"
 #include "core/frontend/emu_window.h"
+#include "core/hle/kernel/process.h"
 #include "core/memory.h"
+#include "core/settings.h"
 #include "video_core/pica_state.h"
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
@@ -850,6 +855,566 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
     }
 }
 
+bool CachedSurface::LoadCustomTexture(u64 tex_hash, Core::CustomTexInfo& tex_info,
+                                      Common::Rectangle<u32>& custom_rect) {
+    bool result = false;
+    auto& custom_tex_cache = Core::System::GetInstance().CustomTexCache();
+    const auto& image_interface = Core::System::GetInstance().GetImageInterface();
+
+    if (custom_tex_cache.IsTextureCached(tex_hash)) {
+        tex_info = custom_tex_cache.LookupTexture(tex_hash);
+        result = true;
+    } else {
+        if (custom_tex_cache.CustomTextureExists(tex_hash)) {
+            const auto& path_info = custom_tex_cache.LookupTexturePathInfo(tex_hash);
+            if (image_interface->DecodePNG(tex_info.tex, tex_info.width, tex_info.height,
+                                           path_info.path)) {
+                // Make sure the texture size is a power of 2
+                if ((ceil(log2(tex_info.width)) == floor(log2(tex_info.width))) &&
+                    (ceil(log2(tex_info.height)) == floor(log2(tex_info.height)))) {
+                    LOG_DEBUG(Render_OpenGL, "Loaded custom texture from {}", path_info.path);
+                    Common::FlipRGBA8Texture(tex_info.tex, tex_info.width, tex_info.height);
+                    custom_tex_cache.CacheTexture(tex_hash, tex_info.tex, tex_info.width,
+                                                  tex_info.height);
+                    result = true;
+                } else {
+                    LOG_ERROR(Render_OpenGL, "Texture {} size is not a power of 2", path_info.path);
+                }
+            } else {
+                LOG_ERROR(Render_OpenGL, "Failed to load custom texture {}", path_info.path);
+            }
+        }
+    }
+
+    if (result) {
+        custom_rect.left = (custom_rect.left / width) * tex_info.width;
+        custom_rect.top = (custom_rect.top / height) * tex_info.height;
+        custom_rect.right = (custom_rect.right / width) * tex_info.width;
+        custom_rect.bottom = (custom_rect.bottom / height) * tex_info.height;
+    }
+
+    return result;
+}
+
+void CachedSurface::DumpTexture(GLuint target_tex, u64 tex_hash) {
+    // Dump texture to RGBA8 and encode as PNG
+    const auto& image_interface = Core::System::GetInstance().GetImageInterface();
+    auto& custom_tex_cache = Core::System::GetInstance().CustomTexCache();
+    std::string dump_path =
+        fmt::format("{}textures/{:016X}/", FileUtil::GetUserPath(FileUtil::UserPath::DumpDir),
+                    Core::System::GetInstance().Kernel().GetCurrentProcess()->codeset->program_id);
+    if (!FileUtil::CreateFullPath(dump_path)) {
+        LOG_ERROR(Render, "Unable to create {}", dump_path);
+        return;
+    }
+
+    dump_path += fmt::format("tex1_{}x{}_{:016X}_{}.png", width, height, tex_hash,
+                             static_cast<u32>(pixel_format));
+    if (!custom_tex_cache.IsTextureDumped(tex_hash) && !FileUtil::Exists(dump_path)) {
+        custom_tex_cache.SetTextureDumped(tex_hash);
+
+        LOG_INFO(Render_OpenGL, "Dumping texture to {}", dump_path);
+        std::vector<u8> decoded_texture;
+        decoded_texture.resize(width * height * 4);
+        glBindTexture(GL_TEXTURE_2D, target_tex);
+        if (GLES) {
+            GetTexImageOES(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, height, width, 0,
+                           &decoded_texture[0]);
+        } else {
+            glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, &decoded_texture[0]);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+        Common::FlipRGBA8Texture(decoded_texture, width, height);
+        if (!image_interface->EncodePNG(dump_path, decoded_texture, width, height))
+            LOG_ERROR(Render_OpenGL, "Failed to save decoded texture");
+    }
+}
+
+/// adapted from https://github.com/bloc97/Anime4K/blob/master/web/main.js
+class Anime4K {
+
+    static constexpr char QUAD_VERT[] = R"(
+precision mediump float;
+in vec2 a_pos;
+out vec2 v_tex_pos;
+void main() {
+    v_tex_pos = a_pos;
+    gl_Position = uvec4(1.0 - 2.0 * a_pos, 0, 1);
+}
+)";
+
+    static constexpr char SCALE_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform vec2 u_size;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+vec4 interp(const vec2 uv) {
+    vec2 px = 1.0 / u_size;
+    vec2 vc = (floor(uv * u_size)) * px;
+    vec2 f = fract(uv * u_size);
+    vec4 tl = texture2D(u_texture, vc);
+    vec4 tr = texture2D(u_texture, vc + vec2(px.x, 0));
+    vec4 bl = texture2D(u_texture, vc + vec2(0, px.y));
+    vec4 br = texture2D(u_texture, vc + px);
+    return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
+}
+void main() {
+    frag_color = interp(1.0 - v_tex_pos);
+}
+)";
+
+    static constexpr char LUM_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+float getLum(vec4 rgb) {
+    return (rgb.r + rgb.r + rgb.g + rgb.g + rgb.g + rgb.b) / 6.0;
+}
+void main() {
+    vec4 rgb = texture2D(u_texture, 1.0 - v_tex_pos);
+    float lum = getLum(rgb);
+    frag_color = vec4(lum);
+}
+)";
+
+    static constexpr char PUSH_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureTemp;
+uniform float u_scale;
+uniform float u_bold;
+uniform vec2 u_pt;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+#define strength (min(u_scale / u_bold, 1.0))
+vec4 HOOKED_tex(vec2 pos) {
+    return texture2D(u_texture, pos);
+}
+vec4 POSTKERNEL_tex(vec2 pos) {
+    return texture2D(u_textureTemp, pos);
+}
+vec4 getLargest(vec4 cc, vec4 lightestColor, vec4 a, vec4 b, vec4 c) {
+    vec4 newColor = cc * (1.0 - strength) + ((a + b + c) / 3.0) * strength;
+    if (newColor.a > lightestColor.a) {
+        return newColor;
+    }
+    return lightestColor;
+}
+vec4 getRGBL(vec2 pos) {
+    return vec4(HOOKED_tex(pos).rgb, POSTKERNEL_tex(pos).x);
+}
+float min3v(vec4 a, vec4 b, vec4 c) {
+    return min(min(a.a, b.a), c.a);
+}
+float max3v(vec4 a, vec4 b, vec4 c) {
+    return max(max(a.a, b.a), c.a);
+}
+void main() {
+    vec2 HOOKED_pos = v_tex_pos;
+    vec2 d = u_pt;
+    vec4 cc = getRGBL(HOOKED_pos);
+    vec4 t = getRGBL(HOOKED_pos + vec2(0.0, -d.y));
+    vec4 tl = getRGBL(HOOKED_pos + vec2(-d.x, -d.y));
+    vec4 tr = getRGBL(HOOKED_pos + vec2(d.x, -d.y));
+    vec4 l = getRGBL(HOOKED_pos + vec2(-d.x, 0.0));
+    vec4 r = getRGBL(HOOKED_pos + vec2(d.x, 0.0));
+    vec4 b = getRGBL(HOOKED_pos + vec2(0.0, d.y));
+    vec4 bl = getRGBL(HOOKED_pos + vec2(-d.x, d.y));
+    vec4 br = getRGBL(HOOKED_pos + vec2(d.x, d.y));
+    vec4 lightestColor = cc;
+    //Kernel 0 and 4
+    float maxDark = max3v(br, b, bl);
+    float minLight = min3v(tl, t, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, tl, t, tr);
+    } else {
+        maxDark = max3v(tl, t, tr);
+        minLight = min3v(br, b, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, br, b, bl);
+        }
+    }
+    //Kernel 1 and 5
+    maxDark = max3v(cc, l, b);
+    minLight = min3v(r, t, tr);
+    if (minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, r, t, tr);
+    } else {
+        maxDark = max3v(cc, r, t);
+        minLight = min3v(bl, l, b);
+        if (minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, bl, l, b);
+        }
+    }
+    //Kernel 2 and 6
+    maxDark = max3v(l, tl, bl);
+    minLight = min3v(r, br, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, r, br, tr);
+    } else {
+        maxDark = max3v(r, br, tr);
+        minLight = min3v(l, tl, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, l, tl, bl);
+        }
+    }
+    //Kernel 3 and 7
+    maxDark = max3v(cc, l, t);
+    minLight = min3v(r, br, b);
+    if (minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, r, br, b);
+    } else {
+        maxDark = max3v(cc, r, b);
+        minLight = min3v(t, l, tl);
+        if (minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, t, l, tl);
+        }
+    }
+    frag_color = lightestColor;
+}
+)";
+
+    static constexpr char GRAD_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureTemp;
+uniform vec2 u_pt;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+vec4 HOOKED_tex(vec2 pos) {
+    return texture2D(u_texture, 1.0 - pos);
+}
+vec4 POSTKERNEL_tex(vec2 pos) {
+    return texture2D(u_textureTemp, 1.0 - pos);
+}
+vec4 getRGBL(vec2 pos) {
+    return vec4(HOOKED_tex(pos).rgb, POSTKERNEL_tex(pos).x);
+}
+void main() {
+    vec2 HOOKED_pos = v_tex_pos;
+    vec2 d = u_pt;
+    //[tl  t tr]
+    //[ l cc  r]
+    //[bl  b br]
+    vec4 cc = getRGBL(HOOKED_pos);
+    vec4 t = getRGBL(HOOKED_pos + vec2(0.0, -d.y));
+    vec4 tl = getRGBL(HOOKED_pos + vec2(-d.x, -d.y));
+    vec4 tr = getRGBL(HOOKED_pos + vec2(d.x, -d.y));
+    vec4 l = getRGBL(HOOKED_pos + vec2(-d.x, 0.0));
+    vec4 r = getRGBL(HOOKED_pos + vec2(d.x, 0.0));
+    vec4 b = getRGBL(HOOKED_pos + vec2(0.0, d.y));
+    vec4 bl = getRGBL(HOOKED_pos + vec2(-d.x, d.y));
+    vec4 br = getRGBL(HOOKED_pos + vec2(d.x, d.y));
+    //Horizontal Gradient
+    //[-1  0  1]
+    //[-2  0  2]
+    //[-1  0  1]
+    float xgrad = (-tl.a + tr.a - l.a - l.a + r.a + r.a - bl.a + br.a);
+    //Vertical Gradient
+    //[-1 -2 -1]
+    //[ 0  0  0]
+    //[ 1  2  1]
+    float ygrad = (-tl.a - t.a - t.a - tr.a + bl.a + b.a + b.a + br.a);
+    frag_color = vec4(1.0 - clamp(sqrt(xgrad * xgrad + ygrad * ygrad), 0.0, 1.0));
+}
+)";
+
+    static constexpr char FINAL_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureTemp;
+uniform vec2 u_pt;
+uniform float u_scale;
+uniform float u_blur;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+#define strength (min(u_scale / u_blur, 1.0))
+vec4 HOOKED_tex(vec2 pos) {
+    return texture2D(u_texture, vec2(pos.x, 1.0 - pos.y));
+}
+vec4 POSTKERNEL_tex(vec2 pos) {
+    return texture2D(u_textureTemp, vec2(pos.x, 1.0 - pos.y));
+}
+vec4 getAverage(vec4 cc, vec4 a, vec4 b, vec4 c) {
+    return cc * (1.0 - strength) + ((a + b + c) / 3.0) * strength;
+}
+vec4 getRGBL(vec2 pos) {
+    return vec4(HOOKED_tex(pos).rgb, POSTKERNEL_tex(pos).x);
+}
+float min3v(vec4 a, vec4 b, vec4 c) {
+    return min(min(a.a, b.a), c.a);
+}
+float max3v(vec4 a, vec4 b, vec4 c) {
+    return max(max(a.a, b.a), c.a);
+}
+void main() {
+    vec2 HOOKED_pos = v_tex_pos;
+    vec2 d = u_pt;
+    vec4 cc = getRGBL(HOOKED_pos);
+    vec4 t = getRGBL(HOOKED_pos + vec2(0.0, -d.y));
+    vec4 tl = getRGBL(HOOKED_pos + vec2(-d.x, -d.y));
+    vec4 tr = getRGBL(HOOKED_pos + vec2(d.x, -d.y));
+    vec4 l = getRGBL(HOOKED_pos + vec2(-d.x, 0.0));
+    vec4 r = getRGBL(HOOKED_pos + vec2(d.x, 0.0));
+    vec4 b = getRGBL(HOOKED_pos + vec2(0.0, d.y));
+    vec4 bl = getRGBL(HOOKED_pos + vec2(-d.x, d.y));
+    vec4 br = getRGBL(HOOKED_pos + vec2(d.x, d.y));
+    //Kernel 0 and 4
+    float maxDark = max3v(br, b, bl);
+    float minLight = min3v(tl, t, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        frag_color = getAverage(cc, tl, t, tr);
+        return;
+    } else {
+        maxDark = max3v(tl, t, tr);
+        minLight = min3v(br, b, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            frag_color = getAverage(cc, br, b, bl);
+            return;
+        }
+    }
+    //Kernel 1 and 5
+    maxDark = max3v(cc, l, b);
+    minLight = min3v(r, t, tr);
+    if (minLight > maxDark) {
+        frag_color = getAverage(cc, r, t, tr);
+        return;
+    } else {
+        maxDark = max3v(cc, r, t);
+        minLight = min3v(bl, l, b);
+        if (minLight > maxDark) {
+            frag_color = getAverage(cc, bl, l, b);
+            return;
+        }
+    }
+    //Kernel 2 and 6
+    maxDark = max3v(l, tl, bl);
+    minLight = min3v(r, br, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        frag_color = getAverage(cc, r, br, tr);
+        return;
+    } else {
+        maxDark = max3v(r, br, tr);
+        minLight = min3v(l, tl, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            frag_color = getAverage(cc, l, tl, bl);
+            return;
+        }
+    }
+    //Kernel 3 and 7
+    maxDark = max3v(cc, l, t);
+    minLight = min3v(r, br, b);
+    if (minLight > maxDark) {
+        frag_color = getAverage(cc, r, br, b);
+        return;
+    } else {
+        maxDark = max3v(cc, r, b);
+        minLight = min3v(t, l, tl);
+        if (minLight > maxDark) {
+            frag_color = getAverage(cc, t, l, tl);
+            return;
+        }
+    }
+    frag_color = cc;
+}
+)";
+
+    static constexpr char DRAW_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureOrig;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+void main() {
+    vec4 color = texture2D(u_texture, 1.0 - v_tex_pos);
+    vec4 colorOrig = texture2D(u_textureOrig, vec2(1.0 - v_tex_pos.x, v_tex_pos.y));
+    frag_color = vec4(color.rgb, colorOrig.a);
+}
+)";
+
+    std::array<OGLTexture, 3> temp_texture;
+    OGLTexture scale_texture;
+
+    OGLBuffer quad_buffer;
+    OGLFramebuffer frame_buffer;
+
+    OGLShader quad_vert;
+    OGLShader scale_frag;
+    OGLShader lum_frag;
+    OGLShader push_frag;
+    OGLShader grad_frag;
+    OGLShader final_frag;
+    OGLShader draw_frag;
+
+    OGLProgram scale_program;
+    OGLProgram lum_program;
+    OGLProgram push_program;
+    OGLProgram grad_program;
+    OGLProgram final_program;
+    OGLProgram draw_program;
+
+#define SET_PROGRAM(prog)                                                                          \
+    const OGLProgram& program = prog;                                                              \
+    glUseProgram(program.handle);                                                                  \
+    GLuint a_pos = glGetUniformLocation(program.handle, "a_pos");                                  \
+    glEnableVertexAttribArray(a_pos);                                                              \
+    glVertexAttribPointer(a_pos, 2, GL_FLOAT, false, 0, 0);
+
+#define SET_UNIFORM(type, name, ...)                                                               \
+    GLint name = glGetUniformLocation(program.handle, #name);                                      \
+    type(name, __VA_ARGS__);
+
+    void SET_TEXTURE(const OGLTexture& tex, unsigned idx = 0) {
+        SET_TEXTURE(tex.handle, idx);
+    }
+
+    void SET_TEXTURE(GLuint tex, unsigned idx = 0) {
+        glActiveTexture(GL_TEXTURE10 + idx);
+        glBindTexture(GL_TEXTURE_2D, tex);
+    };
+
+    void SET_FRAMEBUFFER(const OGLTexture& tex) {
+        SET_FRAMEBUFFER(tex.handle);
+    }
+
+    void SET_FRAMEBUFFER(GLuint tex) {
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+    }
+
+public:
+    GLfloat bold = 6.0;
+    GLfloat blur = 2.0;
+
+    Anime4K() {
+        for (auto& tex : temp_texture)
+            tex.Create();
+        scale_texture.Create();
+
+        quad_buffer.Create();
+        glBindBuffer(GL_ARRAY_BUFFER, quad_buffer.handle);
+        GLfloat quad[]{0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0};
+        glBufferData(GL_ARRAY_BUFFER, 12, quad, GL_STATIC_READ);
+        frame_buffer.Create();
+
+        quad_vert.Create(Anime4K::QUAD_VERT, GL_VERTEX_SHADER);
+        scale_frag.Create(Anime4K::SCALE_FRAG, GL_FRAGMENT_SHADER);
+        lum_frag.Create(Anime4K::LUM_FRAG, GL_FRAGMENT_SHADER);
+        push_frag.Create(Anime4K::PUSH_FRAG, GL_FRAGMENT_SHADER);
+        grad_frag.Create(Anime4K::GRAD_FRAG, GL_FRAGMENT_SHADER);
+        final_frag.Create(Anime4K::FINAL_FRAG, GL_FRAGMENT_SHADER);
+        draw_frag.Create(Anime4K::DRAW_FRAG, GL_FRAGMENT_SHADER);
+
+        scale_program.Create(false, {quad_vert.handle, scale_frag.handle});
+        lum_program.Create(false, {quad_vert.handle, lum_frag.handle});
+        push_program.Create(false, {quad_vert.handle, push_frag.handle});
+        grad_program.Create(false, {quad_vert.handle, grad_frag.handle});
+        final_program.Create(false, {quad_vert.handle, final_frag.handle});
+        draw_program.Create(false, {quad_vert.handle, draw_frag.handle});
+    }
+
+    void rescale(GLuint input_texture, std::size_t height, std::size_t width, std::size_t scale) {
+
+        GLboolean save_depth = glIsEnabled(GL_DEPTH_TEST),
+                  save_stencil = glIsEnabled(GL_STENCIL_TEST);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
+
+        GLint save_unit;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &save_unit);
+
+        std::vector<u8> empty_data(width * height * 4);
+
+        for (const auto& tex : temp_texture) {
+            SET_TEXTURE(tex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                         empty_data.data());
+        }
+
+        SET_TEXTURE(scale_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     empty_data.data());
+
+        glBindFramebuffer(GL_FRAMEBUFFER, frame_buffer.handle);
+        glBindBuffer(GL_ARRAY_BUFFER, quad_buffer.handle);
+
+        // scale
+        {
+            SET_FRAMEBUFFER(scale_texture);
+            SET_PROGRAM(scale_program)
+            SET_TEXTURE(input_texture);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform2f, u_size, width, height);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        // luminance
+        static auto LUM = [this](const OGLTexture& tex1, const OGLTexture& tex2) {
+            SET_FRAMEBUFFER(tex1);
+            SET_PROGRAM(lum_program);
+            SET_TEXTURE(tex2);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        };
+        LUM(temp_texture[0], scale_texture);
+        // push
+        {
+            SET_FRAMEBUFFER(temp_texture[1]);
+            SET_PROGRAM(push_program);
+            SET_TEXTURE(scale_texture, 0);
+            SET_TEXTURE(temp_texture[0], 1);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
+            SET_UNIFORM(glUniform1f, u_scale, scale);
+            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
+            SET_UNIFORM(glUniform1f, u_bold, bold);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        // luminance again
+        LUM(temp_texture[0], temp_texture[1]);
+        // gradient
+        {
+            SET_FRAMEBUFFER(temp_texture[2]);
+            SET_PROGRAM(grad_program)
+            SET_TEXTURE(temp_texture[1], 0);
+            SET_TEXTURE(temp_texture[0], 1);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
+            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        // final
+        {
+            SET_FRAMEBUFFER(input_texture);
+            SET_PROGRAM(final_program)
+            SET_TEXTURE(temp_texture[1], 0);
+            SET_TEXTURE(temp_texture[2], 1);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
+            SET_UNIFORM(glUniform1f, u_scale, scale);
+            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
+            SET_UNIFORM(glUniform1f, u_blur, blur);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, NULL);
+
+        if (save_depth)
+            glEnable(GL_DEPTH_TEST);
+        if (save_stencil)
+            glEnable(GL_STENCIL_TEST);
+
+        glActiveTexture(save_unit);
+    }
+#undef SET_UNIFORM
+#undef SET_PROGRAM
+};
+
 MICROPROFILE_DEFINE(OpenGL_TextureUL, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
 void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint read_fb_handle,
                                     GLuint draw_fb_handle) {
@@ -860,9 +1425,22 @@ void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint r
 
     ASSERT(gl_buffer_size == width * height * GetGLBytesPerPixel(pixel_format));
 
+    // Read custom texture
+    auto& custom_tex_cache = Core::System::GetInstance().CustomTexCache();
+    std::string dump_path; // Has to be declared here for logging later
+    u64 tex_hash = 0;
+    // Required for rect to function properly with custom textures
+    Common::Rectangle custom_rect = rect;
+
+    if (Settings::values.dump_textures || Settings::values.custom_textures)
+        tex_hash = Common::ComputeHash64(gl_buffer.get(), gl_buffer_size);
+
+    if (Settings::values.custom_textures)
+        is_custom = LoadCustomTexture(tex_hash, custom_tex_info, custom_rect);
+
     // Load data from memory to the surface
-    GLint x0 = static_cast<GLint>(rect.left);
-    GLint y0 = static_cast<GLint>(rect.bottom);
+    GLint x0 = static_cast<GLint>(custom_rect.left);
+    GLint y0 = static_cast<GLint>(custom_rect.bottom);
     std::size_t buffer_offset = (y0 * stride + x0) * GetGLBytesPerPixel(pixel_format);
 
     const FormatTuple& tuple = GetFormatTuple(pixel_format);
@@ -876,7 +1454,13 @@ void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint r
         y0 = 0;
 
         unscaled_tex.Create();
-        AllocateSurfaceTexture(unscaled_tex.handle, tuple, rect.GetWidth(), rect.GetHeight());
+        if (is_custom) {
+            AllocateSurfaceTexture(unscaled_tex.handle, GetFormatTuple(PixelFormat::RGBA8),
+                                   custom_tex_info.width, custom_tex_info.height);
+        } else {
+            AllocateSurfaceTexture(unscaled_tex.handle, tuple, custom_rect.GetWidth(),
+                                   custom_rect.GetHeight());
+        }
         target_tex = unscaled_tex.handle;
     }
 
@@ -888,27 +1472,47 @@ void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint r
 
     // Ensure no bad interactions with GL_UNPACK_ALIGNMENT
     ASSERT(stride * GetGLBytesPerPixel(pixel_format) % 4 == 0);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
+    if (is_custom) {
+        if (res_scale == 1) {
+            AllocateSurfaceTexture(texture.handle, GetFormatTuple(PixelFormat::RGBA8),
+                                   custom_tex_info.width, custom_tex_info.height);
+            cur_state.texture_units[0].texture_2d = texture.handle;
+            cur_state.Apply();
+        }
+        // always going to be using rgba8
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(custom_tex_info.width));
 
-    glActiveTexture(GL_TEXTURE0);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, static_cast<GLsizei>(rect.GetWidth()),
-                    static_cast<GLsizei>(rect.GetHeight()), tuple.format, tuple.type,
-                    &gl_buffer[buffer_offset]);
+        glActiveTexture(GL_TEXTURE0);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, custom_tex_info.width, custom_tex_info.height,
+                        GL_RGBA, GL_UNSIGNED_BYTE, custom_tex_info.tex.data());
+    } else {
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
+
+        glActiveTexture(GL_TEXTURE0);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, static_cast<GLsizei>(rect.GetWidth()),
+                        static_cast<GLsizei>(rect.GetHeight()), tuple.format, tuple.type,
+                        &gl_buffer[buffer_offset]);
+
+        static Anime4K anime4k;
+        anime4k.rescale(target_tex, rect.GetHeight(), rect.GetWidth(), 2);
+    }
 
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    if (Settings::values.dump_textures && !is_custom)
+        DumpTexture(target_tex, tex_hash);
 
     cur_state.texture_units[0].texture_2d = old_tex;
     cur_state.Apply();
 
     if (res_scale != 1) {
-        auto scaled_rect = rect;
+        auto scaled_rect = custom_rect;
         scaled_rect.left *= res_scale;
         scaled_rect.top *= res_scale;
         scaled_rect.right *= res_scale;
         scaled_rect.bottom *= res_scale;
 
-        BlitTextures(unscaled_tex.handle, {0, rect.GetHeight(), rect.GetWidth(), 0}, texture.handle,
-                     scaled_rect, type, read_fb_handle, draw_fb_handle);
+        BlitTextures(unscaled_tex.handle, {0, custom_rect.GetHeight(), custom_rect.GetWidth(), 0},
+                     texture.handle, scaled_rect, type, read_fb_handle, draw_fb_handle);
     }
 
     InvalidateAllWatcher();
@@ -1244,8 +1848,8 @@ Surface RasterizerCacheOpenGL::GetSurface(const SurfaceParams& params, ScaleMatc
     if (surface == nullptr) {
         u16 target_res_scale = params.res_scale;
         if (match_res_scale != ScaleMatch::Exact) {
-            // This surface may have a subrect of another surface with a higher res_scale, find it
-            // to adjust our params
+            // This surface may have a subrect of another surface with a higher res_scale, find
+            // it to adjust our params
             SurfaceParams find_params = params;
             Surface expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(
                 surface_cache, find_params, match_res_scale);
@@ -1411,11 +2015,22 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
             state.Apply();
             glActiveTexture(GL_TEXTURE0);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, max_level);
-            u32 width = surface->width * surface->res_scale;
-            u32 height = surface->height * surface->res_scale;
+            u32 width;
+            u32 height;
+            if (surface->is_custom) {
+                width = surface->custom_tex_info.width;
+                height = surface->custom_tex_info.height;
+            } else {
+                width = surface->width * surface->res_scale;
+                height = surface->height * surface->res_scale;
+            }
             for (u32 level = surface->max_level + 1; level <= max_level; ++level) {
                 glTexImage2D(GL_TEXTURE_2D, level, format_tuple.internal_format, width >> level,
                              height >> level, 0, format_tuple.format, format_tuple.type, nullptr);
+            }
+            if (surface->is_custom) {
+                // TODO: proper mipmap support for custom textures
+                glGenerateMipmap(GL_TEXTURE_2D);
             }
             surface->max_level = max_level;
         }
@@ -1449,21 +2064,23 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
                 }
                 state.ResetTexture(level_surface->texture.handle);
                 state.Apply();
-                glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                       level_surface->texture.handle, 0);
-                glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                       GL_TEXTURE_2D, 0, 0);
+                if (!surface->is_custom) {
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                           level_surface->texture.handle, 0);
+                    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                           GL_TEXTURE_2D, 0, 0);
 
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                       surface->texture.handle, level);
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                       GL_TEXTURE_2D, 0, 0);
+                    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                           surface->texture.handle, level);
+                    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                           GL_TEXTURE_2D, 0, 0);
 
-                auto src_rect = level_surface->GetScaledRect();
-                auto dst_rect = params.GetScaledRect();
-                glBlitFramebuffer(src_rect.left, src_rect.bottom, src_rect.right, src_rect.top,
-                                  dst_rect.left, dst_rect.bottom, dst_rect.right, dst_rect.top,
-                                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
+                    auto src_rect = level_surface->GetScaledRect();
+                    auto dst_rect = params.GetScaledRect();
+                    glBlitFramebuffer(src_rect.left, src_rect.bottom, src_rect.right, src_rect.top,
+                                      dst_rect.left, dst_rect.bottom, dst_rect.right, dst_rect.top,
+                                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+                }
                 watcher->Validate();
             }
         }
@@ -1503,9 +2120,10 @@ const CachedTextureCube& RasterizerCacheOpenGL::GetTextureCube(const TextureCube
             if (surface) {
                 face.watcher = surface->CreateWatcher();
             } else {
-                // Can occur when texture address is invalid. We mark the watcher with nullptr in
-                // this case and the content of the face wouldn't get updated. These are usually
-                // leftover setup in the texture unit and games are not supposed to draw using them.
+                // Can occur when texture address is invalid. We mark the watcher with nullptr
+                // in this case and the content of the face wouldn't get updated. These are
+                // usually leftover setup in the texture unit and games are not supposed to draw
+                // using them.
                 face.watcher = nullptr;
             }
         }
@@ -1794,8 +2412,8 @@ void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surf
 
     for (auto& pair : RangeFromInterval(dirty_regions, flush_interval)) {
         // small sizes imply that this most likely comes from the cpu, flush the entire region
-        // the point is to avoid thousands of small writes every frame if the cpu decides to access
-        // that region, anything higher than 8 you're guaranteed it comes from a service
+        // the point is to avoid thousands of small writes every frame if the cpu decides to
+        // access that region, anything higher than 8 you're guaranteed it comes from a service
         const auto interval = size <= 8 ? pair.first : pair.first & flush_interval;
         auto& surface = pair.second;
 
