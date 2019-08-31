@@ -850,6 +850,491 @@ void CachedSurface::FlushGLBuffer(PAddr flush_start, PAddr flush_end) {
     }
 }
 
+/// adapted from https://github.com/bloc97/Anime4K/blob/master/web/main.js
+class Anime4K {
+
+    static constexpr char QUAD_VERT[] = R"(
+precision mediump float;
+in vec2 a_pos;
+out vec2 v_tex_pos;
+void main() {
+    v_tex_pos = a_pos;
+    gl_Position = uvec4(1.0 - 2.0 * a_pos, 0, 1);
+}
+)";
+
+    static constexpr char SCALE_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform vec2 u_size;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+vec4 interp(const vec2 uv) {
+    vec2 px = 1.0 / u_size;
+    vec2 vc = (floor(uv * u_size)) * px;
+    vec2 f = fract(uv * u_size);
+    vec4 tl = texture2D(u_texture, vc);
+    vec4 tr = texture2D(u_texture, vc + vec2(px.x, 0));
+    vec4 bl = texture2D(u_texture, vc + vec2(0, px.y));
+    vec4 br = texture2D(u_texture, vc + px);
+    return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
+}
+void main() {
+    frag_color = interp(1.0 - v_tex_pos);
+}
+)";
+
+    static constexpr char LUM_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+float getLum(vec4 rgb) {
+    return (rgb.r + rgb.r + rgb.g + rgb.g + rgb.g + rgb.b) / 6.0;
+}
+void main() {
+    vec4 rgb = texture2D(u_texture, 1.0 - v_tex_pos);
+    float lum = getLum(rgb);
+    frag_color = vec4(lum);
+}
+)";
+
+    static constexpr char PUSH_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureTemp;
+uniform float u_scale;
+uniform float u_bold;
+uniform vec2 u_pt;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+#define strength (min(u_scale / u_bold, 1.0))
+vec4 HOOKED_tex(vec2 pos) {
+    return texture2D(u_texture, pos);
+}
+vec4 POSTKERNEL_tex(vec2 pos) {
+    return texture2D(u_textureTemp, pos);
+}
+vec4 getLargest(vec4 cc, vec4 lightestColor, vec4 a, vec4 b, vec4 c) {
+    vec4 newColor = cc * (1.0 - strength) + ((a + b + c) / 3.0) * strength;
+    if (newColor.a > lightestColor.a) {
+        return newColor;
+    }
+    return lightestColor;
+}
+vec4 getRGBL(vec2 pos) {
+    return vec4(HOOKED_tex(pos).rgb, POSTKERNEL_tex(pos).x);
+}
+float min3v(vec4 a, vec4 b, vec4 c) {
+    return min(min(a.a, b.a), c.a);
+}
+float max3v(vec4 a, vec4 b, vec4 c) {
+    return max(max(a.a, b.a), c.a);
+}
+void main() {
+    vec2 HOOKED_pos = v_tex_pos;
+    vec2 d = u_pt;
+    vec4 cc = getRGBL(HOOKED_pos);
+    vec4 t = getRGBL(HOOKED_pos + vec2(0.0, -d.y));
+    vec4 tl = getRGBL(HOOKED_pos + vec2(-d.x, -d.y));
+    vec4 tr = getRGBL(HOOKED_pos + vec2(d.x, -d.y));
+    vec4 l = getRGBL(HOOKED_pos + vec2(-d.x, 0.0));
+    vec4 r = getRGBL(HOOKED_pos + vec2(d.x, 0.0));
+    vec4 b = getRGBL(HOOKED_pos + vec2(0.0, d.y));
+    vec4 bl = getRGBL(HOOKED_pos + vec2(-d.x, d.y));
+    vec4 br = getRGBL(HOOKED_pos + vec2(d.x, d.y));
+    vec4 lightestColor = cc;
+    //Kernel 0 and 4
+    float maxDark = max3v(br, b, bl);
+    float minLight = min3v(tl, t, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, tl, t, tr);
+    } else {
+        maxDark = max3v(tl, t, tr);
+        minLight = min3v(br, b, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, br, b, bl);
+        }
+    }
+    //Kernel 1 and 5
+    maxDark = max3v(cc, l, b);
+    minLight = min3v(r, t, tr);
+    if (minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, r, t, tr);
+    } else {
+        maxDark = max3v(cc, r, t);
+        minLight = min3v(bl, l, b);
+        if (minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, bl, l, b);
+        }
+    }
+    //Kernel 2 and 6
+    maxDark = max3v(l, tl, bl);
+    minLight = min3v(r, br, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, r, br, tr);
+    } else {
+        maxDark = max3v(r, br, tr);
+        minLight = min3v(l, tl, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, l, tl, bl);
+        }
+    }
+    //Kernel 3 and 7
+    maxDark = max3v(cc, l, t);
+    minLight = min3v(r, br, b);
+    if (minLight > maxDark) {
+        lightestColor = getLargest(cc, lightestColor, r, br, b);
+    } else {
+        maxDark = max3v(cc, r, b);
+        minLight = min3v(t, l, tl);
+        if (minLight > maxDark) {
+            lightestColor = getLargest(cc, lightestColor, t, l, tl);
+        }
+    }
+    frag_color = lightestColor;
+}
+)";
+
+    static constexpr char GRAD_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureTemp;
+uniform vec2 u_pt;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+vec4 HOOKED_tex(vec2 pos) {
+    return texture2D(u_texture, 1.0 - pos);
+}
+vec4 POSTKERNEL_tex(vec2 pos) {
+    return texture2D(u_textureTemp, 1.0 - pos);
+}
+vec4 getRGBL(vec2 pos) {
+    return vec4(HOOKED_tex(pos).rgb, POSTKERNEL_tex(pos).x);
+}
+void main() {
+    vec2 HOOKED_pos = v_tex_pos;
+    vec2 d = u_pt;
+    //[tl  t tr]
+    //[ l cc  r]
+    //[bl  b br]
+    vec4 cc = getRGBL(HOOKED_pos);
+    vec4 t = getRGBL(HOOKED_pos + vec2(0.0, -d.y));
+    vec4 tl = getRGBL(HOOKED_pos + vec2(-d.x, -d.y));
+    vec4 tr = getRGBL(HOOKED_pos + vec2(d.x, -d.y));
+    vec4 l = getRGBL(HOOKED_pos + vec2(-d.x, 0.0));
+    vec4 r = getRGBL(HOOKED_pos + vec2(d.x, 0.0));
+    vec4 b = getRGBL(HOOKED_pos + vec2(0.0, d.y));
+    vec4 bl = getRGBL(HOOKED_pos + vec2(-d.x, d.y));
+    vec4 br = getRGBL(HOOKED_pos + vec2(d.x, d.y));
+    //Horizontal Gradient
+    //[-1  0  1]
+    //[-2  0  2]
+    //[-1  0  1]
+    float xgrad = (-tl.a + tr.a - l.a - l.a + r.a + r.a - bl.a + br.a);
+    //Vertical Gradient
+    //[-1 -2 -1]
+    //[ 0  0  0]
+    //[ 1  2  1]
+    float ygrad = (-tl.a - t.a - t.a - tr.a + bl.a + b.a + b.a + br.a);
+    frag_color = vec4(1.0 - clamp(sqrt(xgrad * xgrad + ygrad * ygrad), 0.0, 1.0));
+}
+)";
+
+    static constexpr char FINAL_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureTemp;
+uniform vec2 u_pt;
+uniform float u_scale;
+uniform float u_blur;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+#define strength (min(u_scale / u_blur, 1.0))
+vec4 HOOKED_tex(vec2 pos) {
+    return texture2D(u_texture, vec2(pos.x, 1.0 - pos.y));
+}
+vec4 POSTKERNEL_tex(vec2 pos) {
+    return texture2D(u_textureTemp, vec2(pos.x, 1.0 - pos.y));
+}
+vec4 getAverage(vec4 cc, vec4 a, vec4 b, vec4 c) {
+    return cc * (1.0 - strength) + ((a + b + c) / 3.0) * strength;
+}
+vec4 getRGBL(vec2 pos) {
+    return vec4(HOOKED_tex(pos).rgb, POSTKERNEL_tex(pos).x);
+}
+float min3v(vec4 a, vec4 b, vec4 c) {
+    return min(min(a.a, b.a), c.a);
+}
+float max3v(vec4 a, vec4 b, vec4 c) {
+    return max(max(a.a, b.a), c.a);
+}
+void main() {
+    vec2 HOOKED_pos = v_tex_pos;
+    vec2 d = u_pt;
+    vec4 cc = getRGBL(HOOKED_pos);
+    vec4 t = getRGBL(HOOKED_pos + vec2(0.0, -d.y));
+    vec4 tl = getRGBL(HOOKED_pos + vec2(-d.x, -d.y));
+    vec4 tr = getRGBL(HOOKED_pos + vec2(d.x, -d.y));
+    vec4 l = getRGBL(HOOKED_pos + vec2(-d.x, 0.0));
+    vec4 r = getRGBL(HOOKED_pos + vec2(d.x, 0.0));
+    vec4 b = getRGBL(HOOKED_pos + vec2(0.0, d.y));
+    vec4 bl = getRGBL(HOOKED_pos + vec2(-d.x, d.y));
+    vec4 br = getRGBL(HOOKED_pos + vec2(d.x, d.y));
+    //Kernel 0 and 4
+    float maxDark = max3v(br, b, bl);
+    float minLight = min3v(tl, t, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        frag_color = getAverage(cc, tl, t, tr);
+        return;
+    } else {
+        maxDark = max3v(tl, t, tr);
+        minLight = min3v(br, b, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            frag_color = getAverage(cc, br, b, bl);
+            return;
+        }
+    }
+    //Kernel 1 and 5
+    maxDark = max3v(cc, l, b);
+    minLight = min3v(r, t, tr);
+    if (minLight > maxDark) {
+        frag_color = getAverage(cc, r, t, tr);
+        return;
+    } else {
+        maxDark = max3v(cc, r, t);
+        minLight = min3v(bl, l, b);
+        if (minLight > maxDark) {
+            frag_color = getAverage(cc, bl, l, b);
+            return;
+        }
+    }
+    //Kernel 2 and 6
+    maxDark = max3v(l, tl, bl);
+    minLight = min3v(r, br, tr);
+    if (minLight > cc.a && minLight > maxDark) {
+        frag_color = getAverage(cc, r, br, tr);
+        return;
+    } else {
+        maxDark = max3v(r, br, tr);
+        minLight = min3v(l, tl, bl);
+        if (minLight > cc.a && minLight > maxDark) {
+            frag_color = getAverage(cc, l, tl, bl);
+            return;
+        }
+    }
+    //Kernel 3 and 7
+    maxDark = max3v(cc, l, t);
+    minLight = min3v(r, br, b);
+    if (minLight > maxDark) {
+        frag_color = getAverage(cc, r, br, b);
+        return;
+    } else {
+        maxDark = max3v(cc, r, b);
+        minLight = min3v(t, l, tl);
+        if (minLight > maxDark) {
+            frag_color = getAverage(cc, t, l, tl);
+            return;
+        }
+    }
+    frag_color = cc;
+}
+)";
+
+    static constexpr char DRAW_FRAG[] = R"(
+precision mediump float;
+uniform sampler2D u_texture;
+uniform sampler2D u_textureOrig;
+in vec2 v_tex_pos;
+out vec4 frag_color;
+void main() {
+    vec4 color = texture2D(u_texture, 1.0 - v_tex_pos);
+    vec4 colorOrig = texture2D(u_textureOrig, vec2(1.0 - v_tex_pos.x, v_tex_pos.y));
+    frag_color = vec4(color.rgb, colorOrig.a);
+}
+)";
+
+    std::array<OGLTexture, 3> temp_texture;
+    OGLTexture scale_texture;
+
+    OGLBuffer quad_buffer;
+    OGLFramebuffer frame_buffer;
+
+    OGLShader quad_vert;
+    OGLShader scale_frag;
+    OGLShader lum_frag;
+    OGLShader push_frag;
+    OGLShader grad_frag;
+    OGLShader final_frag;
+    OGLShader draw_frag;
+
+    OGLProgram scale_program;
+    OGLProgram lum_program;
+    OGLProgram push_program;
+    OGLProgram grad_program;
+    OGLProgram final_program;
+    OGLProgram draw_program;
+
+#define SET_PROGRAM(prog)                                                                          \
+    const OGLProgram& program = prog;                                                              \
+    glUseProgram(program.handle);                                                                  \
+    GLuint a_pos = glGetUniformLocation(program.handle, "a_pos");                                  \
+    glEnableVertexAttribArray(a_pos);                                                              \
+    glVertexAttribPointer(a_pos, 2, GL_FLOAT, false, 0, 0);
+
+#define SET_UNIFORM(type, name, ...)                                                               \
+    GLint name = glGetUniformLocation(program.handle, #name);                                      \
+    type(name, __VA_ARGS__);
+
+    void SET_TEXTURE(const OGLTexture& tex, unsigned idx = 0) {
+        SET_TEXTURE(tex.handle, idx);
+    }
+
+    void SET_TEXTURE(GLuint tex, unsigned idx = 0) {
+        glActiveTexture(GL_TEXTURE10 + idx);
+        glBindTexture(GL_TEXTURE_2D, tex);
+    };
+
+    void SET_FRAMEBUFFER(const OGLTexture& tex) {
+        SET_FRAMEBUFFER(tex.handle);
+    }
+
+    void SET_FRAMEBUFFER(GLuint tex) {
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+    }
+
+public:
+    GLfloat bold = 6.0;
+    GLfloat blur = 2.0;
+
+    Anime4K() {
+        for (auto& tex : temp_texture)
+            tex.Create();
+        scale_texture.Create();
+
+        quad_buffer.Create();
+        glBindBuffer(GL_ARRAY_BUFFER, quad_buffer.handle);
+        GLfloat quad[]{0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0};
+        glBufferData(GL_ARRAY_BUFFER, 12, quad, GL_STATIC_READ);
+        frame_buffer.Create();
+
+        quad_vert.Create(Anime4K::QUAD_VERT, GL_VERTEX_SHADER);
+        scale_frag.Create(Anime4K::SCALE_FRAG, GL_FRAGMENT_SHADER);
+        lum_frag.Create(Anime4K::LUM_FRAG, GL_FRAGMENT_SHADER);
+        push_frag.Create(Anime4K::PUSH_FRAG, GL_FRAGMENT_SHADER);
+        grad_frag.Create(Anime4K::GRAD_FRAG, GL_FRAGMENT_SHADER);
+        final_frag.Create(Anime4K::FINAL_FRAG, GL_FRAGMENT_SHADER);
+        draw_frag.Create(Anime4K::DRAW_FRAG, GL_FRAGMENT_SHADER);
+
+        scale_program.Create(false, {quad_vert.handle, scale_frag.handle});
+        lum_program.Create(false, {quad_vert.handle, lum_frag.handle});
+        push_program.Create(false, {quad_vert.handle, push_frag.handle});
+        grad_program.Create(false, {quad_vert.handle, grad_frag.handle});
+        final_program.Create(false, {quad_vert.handle, final_frag.handle});
+        draw_program.Create(false, {quad_vert.handle, draw_frag.handle});
+    }
+
+    void rescale(GLuint input_texture, std::size_t height, std::size_t width, std::size_t scale) {
+
+        GLboolean save_depth = glIsEnabled(GL_DEPTH_TEST),
+                  save_stencil = glIsEnabled(GL_STENCIL_TEST);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
+
+        GLint save_unit;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &save_unit);
+
+        std::vector<u8> empty_data(width * height * 4);
+
+        for (const auto& tex : temp_texture) {
+            SET_TEXTURE(tex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                         empty_data.data());
+        }
+
+        SET_TEXTURE(scale_texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     empty_data.data());
+
+        glBindFramebuffer(GL_FRAMEBUFFER, frame_buffer.handle);
+        glBindBuffer(GL_ARRAY_BUFFER, quad_buffer.handle);
+
+        // scale
+        {
+            SET_FRAMEBUFFER(scale_texture);
+            SET_PROGRAM(scale_program)
+            SET_TEXTURE(input_texture);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform2f, u_size, width, height);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        // luminance
+        static auto LUM = [this](const OGLTexture& tex1, const OGLTexture& tex2) {
+            SET_FRAMEBUFFER(tex1);
+            SET_PROGRAM(lum_program);
+            SET_TEXTURE(tex2);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        };
+        LUM(temp_texture[0], scale_texture);
+        // push
+        {
+            SET_FRAMEBUFFER(temp_texture[1]);
+            SET_PROGRAM(push_program);
+            SET_TEXTURE(scale_texture, 0);
+            SET_TEXTURE(temp_texture[0], 1);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
+            SET_UNIFORM(glUniform1f, u_scale, scale);
+            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
+            SET_UNIFORM(glUniform1f, u_bold, bold);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        // luminance again
+        LUM(temp_texture[0], temp_texture[1]);
+        // gradient
+        {
+            SET_FRAMEBUFFER(temp_texture[2]);
+            SET_PROGRAM(grad_program)
+            SET_TEXTURE(temp_texture[1], 0);
+            SET_TEXTURE(temp_texture[0], 1);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
+            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        // final
+        {
+            SET_FRAMEBUFFER(input_texture);
+            SET_PROGRAM(final_program)
+            SET_TEXTURE(temp_texture[1], 0);
+            SET_TEXTURE(temp_texture[2], 1);
+            SET_UNIFORM(glUniform1i, u_texture, 10);
+            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
+            SET_UNIFORM(glUniform1f, u_scale, scale);
+            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
+            SET_UNIFORM(glUniform1f, u_blur, blur);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, NULL);
+
+        if (save_depth)
+            glEnable(GL_DEPTH_TEST);
+        if (save_stencil)
+            glEnable(GL_STENCIL_TEST);
+
+        glActiveTexture(save_unit);
+    }
+#undef SET_UNIFORM
+#undef SET_PROGRAM
+};
+
 MICROPROFILE_DEFINE(OpenGL_TextureUL, "OpenGL", "Texture Upload", MP_RGB(128, 192, 64));
 void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint read_fb_handle,
                                     GLuint draw_fb_handle) {
@@ -894,6 +1379,9 @@ void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint r
     glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, static_cast<GLsizei>(rect.GetWidth()),
                     static_cast<GLsizei>(rect.GetHeight()), tuple.format, tuple.type,
                     &gl_buffer[buffer_offset]);
+
+    static Anime4K anime4k;
+    anime4k.rescale(target_tex, height, width, 2);
 
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
