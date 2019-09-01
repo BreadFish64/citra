@@ -855,20 +855,24 @@ class Anime4K {
 
     static constexpr char QUAD_VERT[] = R"(
 precision mediump float;
+
 in vec2 a_pos;
 out vec2 v_tex_pos;
+
 void main() {
     v_tex_pos = a_pos;
-    gl_Position = uvec4(1.0 - 2.0 * a_pos, 0, 1);
+    gl_Position = vec4(1.0 - 2.0 * a_pos, 0, 1);
 }
 )";
 
     static constexpr char SCALE_FRAG[] = R"(
 precision mediump float;
+
 uniform sampler2D u_texture;
 uniform vec2 u_size;
 in vec2 v_tex_pos;
 out vec4 frag_color;
+
 vec4 interp(const vec2 uv) {
     vec2 px = 1.0 / u_size;
     vec2 vc = (floor(uv * u_size)) * px;
@@ -886,9 +890,11 @@ void main() {
 
     static constexpr char LUM_FRAG[] = R"(
 precision mediump float;
+
 uniform sampler2D u_texture;
 in vec2 v_tex_pos;
 out vec4 frag_color;
+
 float getLum(vec4 rgb) {
     return (rgb.r + rgb.r + rgb.g + rgb.g + rgb.g + rgb.b) / 6.0;
 }
@@ -901,6 +907,7 @@ void main() {
 
     static constexpr char PUSH_FRAG[] = R"(
 precision mediump float;
+
 uniform sampler2D u_texture;
 uniform sampler2D u_textureTemp;
 uniform float u_scale;
@@ -908,7 +915,9 @@ uniform float u_bold;
 uniform vec2 u_pt;
 in vec2 v_tex_pos;
 out vec4 frag_color;
+
 #define strength (min(u_scale / u_bold, 1.0))
+
 vec4 HOOKED_tex(vec2 pos) {
     return texture2D(u_texture, pos);
 }
@@ -998,11 +1007,13 @@ void main() {
 
     static constexpr char GRAD_FRAG[] = R"(
 precision mediump float;
+
 uniform sampler2D u_texture;
 uniform sampler2D u_textureTemp;
 uniform vec2 u_pt;
 in vec2 v_tex_pos;
 out vec4 frag_color;
+
 vec4 HOOKED_tex(vec2 pos) {
     return texture2D(u_texture, 1.0 - pos);
 }
@@ -1043,6 +1054,7 @@ void main() {
 
     static constexpr char FINAL_FRAG[] = R"(
 precision mediump float;
+
 uniform sampler2D u_texture;
 uniform sampler2D u_textureTemp;
 uniform vec2 u_pt;
@@ -1050,7 +1062,9 @@ uniform float u_scale;
 uniform float u_blur;
 in vec2 v_tex_pos;
 out vec4 frag_color;
+
 #define strength (min(u_scale / u_blur, 1.0))
+
 vec4 HOOKED_tex(vec2 pos) {
     return texture2D(u_texture, vec2(pos.x, 1.0 - pos.y));
 }
@@ -1143,10 +1157,12 @@ void main() {
 
     static constexpr char DRAW_FRAG[] = R"(
 precision mediump float;
+
 uniform sampler2D u_texture;
 uniform sampler2D u_textureOrig;
 in vec2 v_tex_pos;
 out vec4 frag_color;
+
 void main() {
     vec4 color = texture2D(u_texture, 1.0 - v_tex_pos);
     vec4 colorOrig = texture2D(u_textureOrig, vec2(1.0 - v_tex_pos.x, v_tex_pos.y));
@@ -1154,10 +1170,18 @@ void main() {
 }
 )";
 
-    std::array<OGLTexture, 3> temp_texture;
+    struct Tex {
+        static constexpr GLuint Temp = 0, Temp2 = 1, Temp3 = 2, Scale = 3, Input = 4;
+    };
+
+    std::array<OGLTexture, 3> textures;
     OGLTexture scale_texture;
 
+    CachedSurface* surface;
+    u32 scale;
+
     OGLBuffer quad_buffer;
+
     OGLFramebuffer frame_buffer;
 
     OGLShader quad_vert;
@@ -1178,22 +1202,13 @@ void main() {
 #define SET_PROGRAM(prog)                                                                          \
     const OGLProgram& program = prog;                                                              \
     glUseProgram(program.handle);                                                                  \
-    GLuint a_pos = glGetUniformLocation(program.handle, "a_pos");                                  \
+    GLuint a_pos = glGetAttribLocation(program.handle, "a_pos");                                   \
     glEnableVertexAttribArray(a_pos);                                                              \
     glVertexAttribPointer(a_pos, 2, GL_FLOAT, false, 0, 0);
 
 #define SET_UNIFORM(type, name, ...)                                                               \
     GLint name = glGetUniformLocation(program.handle, #name);                                      \
     type(name, __VA_ARGS__);
-
-    void SET_TEXTURE(const OGLTexture& tex, unsigned idx = 0) {
-        SET_TEXTURE(tex.handle, idx);
-    }
-
-    void SET_TEXTURE(GLuint tex, unsigned idx = 0) {
-        glActiveTexture(GL_TEXTURE10 + idx);
-        glBindTexture(GL_TEXTURE_2D, tex);
-    };
 
     void SET_FRAMEBUFFER(const OGLTexture& tex) {
         SET_FRAMEBUFFER(tex.handle);
@@ -1203,19 +1218,92 @@ void main() {
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
     }
 
+    u32 GetScaledHeight() const {
+        return surface->height * scale;
+    }
+
+    u32 GetScaledWidth() const {
+        return surface->width * scale;
+    }
+
+    void Scale() {
+        SET_FRAMEBUFFER(scale_texture);
+        SET_PROGRAM(scale_program)
+        SET_UNIFORM(glUniform1i, u_texture, Tex::Input);
+        SET_UNIFORM(glUniform2f, u_size, GetScaledWidth(), GetScaledHeight());
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    void Luminance(bool first_run) {
+        SET_FRAMEBUFFER(textures[Tex::Temp]);
+        SET_PROGRAM(lum_program);
+        SET_UNIFORM(glUniform1i, u_texture, first_run ? Tex::Scale : Tex::Temp2);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    void Push() {
+        SET_FRAMEBUFFER(textures[Tex::Temp2]);
+        SET_PROGRAM(push_program);
+        SET_UNIFORM(glUniform1i, u_texture, Tex::Scale);
+        SET_UNIFORM(glUniform1i, u_textureTemp, Tex::Temp);
+        SET_UNIFORM(glUniform1f, u_scale, scale);
+        SET_UNIFORM(glUniform2f, u_pt, 1.0 / GetScaledWidth(), 1.0 / GetScaledHeight());
+        SET_UNIFORM(glUniform1f, u_bold, bold);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    void Gradient() {
+        SET_FRAMEBUFFER(textures[Tex::Temp3]);
+        SET_PROGRAM(grad_program)
+        SET_UNIFORM(glUniform1i, u_texture, Tex::Temp2);
+        SET_UNIFORM(glUniform1i, u_textureTemp, Tex::Temp);
+        SET_UNIFORM(glUniform2f, u_pt, 1.0 / GetScaledWidth(), 1.0 / GetScaledHeight());
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    void Final() {
+        SET_FRAMEBUFFER(textures[Tex::Temp]);
+        SET_PROGRAM(final_program)
+        SET_UNIFORM(glUniform1i, u_texture, Tex::Temp2);
+        SET_UNIFORM(glUniform1i, u_textureTemp, Tex::Temp3);
+        SET_UNIFORM(glUniform1f, u_scale, scale);
+        SET_UNIFORM(glUniform2f, u_pt, 1.0 / GetScaledWidth(), 1.0 / GetScaledHeight());
+        SET_UNIFORM(glUniform1f, u_blur, blur);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    void Draw() {
+        SET_FRAMEBUFFER(scale_texture);
+        SET_PROGRAM(draw_program);
+        SET_UNIFORM(glUniform1i, u_texture, Tex::Temp);
+        SET_UNIFORM(glUniform1i, u_textureOrig, Tex::Input);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
 public:
     GLfloat bold = 6.0;
     GLfloat blur = 2.0;
 
     Anime4K() {
-        for (auto& tex : temp_texture)
+        for (auto& tex : textures)
             tex.Create();
-        scale_texture.Create();
 
         quad_buffer.Create();
+
+        constexpr std::array<GLfloat, 12> quad{0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+                                               0.0, 1.0, 1.0, 0.0, 1.0, 1.0};
+        GLint buff_id;
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &buff_id);
         glBindBuffer(GL_ARRAY_BUFFER, quad_buffer.handle);
-        GLfloat quad[]{0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0};
-        glBufferData(GL_ARRAY_BUFFER, 12, quad, GL_STATIC_READ);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad.data(), GL_STATIC_READ);
+        glBindBuffer(GL_ARRAY_BUFFER, buff_id);
+
         frame_buffer.Create();
 
         quad_vert.Create(Anime4K::QUAD_VERT, GL_VERTEX_SHADER);
@@ -1234,102 +1322,54 @@ public:
         draw_program.Create(false, {quad_vert.handle, draw_frag.handle});
     }
 
-    void rescale(GLuint input_texture, std::size_t height, std::size_t width, std::size_t scale) {
+    void rescale(CachedSurface* surface, u32 factor) {
+        this->surface = surface;
+        this->scale = factor;
 
-        GLboolean save_depth = glIsEnabled(GL_DEPTH_TEST),
-                  save_stencil = glIsEnabled(GL_STENCIL_TEST);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_STENCIL_TEST);
-
-        GLint save_unit;
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &save_unit);
-
-        std::vector<u8> empty_data(width * height * 4);
-
-        for (const auto& tex : temp_texture) {
-            SET_TEXTURE(tex);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                         empty_data.data());
+        {
+            GLuint unit = Tex::Temp;
+            for (const auto& tex : textures) {
+                AllocateSurfaceTexture(tex.handle, GetFormatTuple(surface->pixel_format),
+                                       GetScaledWidth(), GetScaledHeight());
+                glActiveTexture(GL_TEXTURE0 + unit);
+                glBindTexture(GL_TEXTURE_2D, tex.handle);
+                unit++;
+            }
         }
 
-        SET_TEXTURE(scale_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     empty_data.data());
+        scale_texture.Create();
+        AllocateSurfaceTexture(scale_texture.handle, GetFormatTuple(surface->pixel_format),
+                               GetScaledWidth(), GetScaledHeight());
+        glActiveTexture(GL_TEXTURE0 + Tex::Scale);
+        glBindTexture(GL_TEXTURE_2D, scale_texture.handle);
+
+        glActiveTexture(GL_TEXTURE0 + Tex::Input);
+        glBindTexture(GL_TEXTURE_2D, surface->texture.handle);
+
+        /*GLint draw_fbo_id = 0, read_fbo_id = 0;
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_fbo_id);
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_fbo_id);*/
+        GLint buff_id;
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &buff_id);
+        GLint shader_program_id;
+        glGetIntegerv(GL_CURRENT_PROGRAM, &shader_program_id);
 
         glBindFramebuffer(GL_FRAMEBUFFER, frame_buffer.handle);
         glBindBuffer(GL_ARRAY_BUFFER, quad_buffer.handle);
 
-        // scale
-        {
-            SET_FRAMEBUFFER(scale_texture);
-            SET_PROGRAM(scale_program)
-            SET_TEXTURE(input_texture);
-            SET_UNIFORM(glUniform1i, u_texture, 10);
-            SET_UNIFORM(glUniform2f, u_size, width, height);
+        Scale();
+        Luminance(true);
+        Push();
+        Luminance(false);
+        Gradient();
+        Final();
+        Draw();
+        surface->texture = std::move(scale_texture);
 
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        }
-        // luminance
-        static auto LUM = [this](const OGLTexture& tex1, const OGLTexture& tex2) {
-            SET_FRAMEBUFFER(tex1);
-            SET_PROGRAM(lum_program);
-            SET_TEXTURE(tex2);
-            SET_UNIFORM(glUniform1i, u_texture, 10);
-
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        };
-        LUM(temp_texture[0], scale_texture);
-        // push
-        {
-            SET_FRAMEBUFFER(temp_texture[1]);
-            SET_PROGRAM(push_program);
-            SET_TEXTURE(scale_texture, 0);
-            SET_TEXTURE(temp_texture[0], 1);
-            SET_UNIFORM(glUniform1i, u_texture, 10);
-            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
-            SET_UNIFORM(glUniform1f, u_scale, scale);
-            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
-            SET_UNIFORM(glUniform1f, u_bold, bold);
-
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        }
-        // luminance again
-        LUM(temp_texture[0], temp_texture[1]);
-        // gradient
-        {
-            SET_FRAMEBUFFER(temp_texture[2]);
-            SET_PROGRAM(grad_program)
-            SET_TEXTURE(temp_texture[1], 0);
-            SET_TEXTURE(temp_texture[0], 1);
-            SET_UNIFORM(glUniform1i, u_texture, 10);
-            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
-            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
-
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        }
-        // final
-        {
-            SET_FRAMEBUFFER(input_texture);
-            SET_PROGRAM(final_program)
-            SET_TEXTURE(temp_texture[1], 0);
-            SET_TEXTURE(temp_texture[2], 1);
-            SET_UNIFORM(glUniform1i, u_texture, 10);
-            SET_UNIFORM(glUniform1i, u_textureTemp, 11);
-            SET_UNIFORM(glUniform1f, u_scale, scale);
-            SET_UNIFORM(glUniform2f, u_pt, 1.0 / (width * scale), 1.0 / (height * scale));
-            SET_UNIFORM(glUniform1f, u_blur, blur);
-
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        }
-
-        glBindFramebuffer(GL_FRAMEBUFFER, NULL);
-
-        if (save_depth)
-            glEnable(GL_DEPTH_TEST);
-        if (save_stencil)
-            glEnable(GL_STENCIL_TEST);
-
-        glActiveTexture(save_unit);
+        /*glBindFramebuffer(GL_DRAW_FRAMEBUFFER, draw_fbo_id);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, read_fbo_id);*/
+        glBindBuffer(GL_ARRAY_BUFFER, buff_id);
+        glUseProgram(shader_program_id);
     }
 #undef SET_UNIFORM
 #undef SET_PROGRAM
@@ -1361,7 +1401,8 @@ void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint r
         y0 = 0;
 
         unscaled_tex.Create();
-        AllocateSurfaceTexture(unscaled_tex.handle, tuple, rect.GetWidth(), rect.GetHeight());
+        AllocateSurfaceTexture(unscaled_tex.handle, GetFormatTuple(pixel_format), rect.GetWidth(),
+                               rect.GetHeight());
         target_tex = unscaled_tex.handle;
     }
 
@@ -1381,7 +1422,9 @@ void CachedSurface::UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint r
                     &gl_buffer[buffer_offset]);
 
     static Anime4K anime4k;
-    anime4k.rescale(target_tex, height, width, 2);
+    anime4k.rescale(this, 2);
+    cur_state.texture_units[0].texture_2d = texture.handle;
+    cur_state.Apply();
 
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
