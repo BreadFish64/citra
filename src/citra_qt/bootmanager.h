@@ -7,10 +7,9 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <QGLWidget>
 #include <QImage>
 #include <QThread>
-#include "common/thread.h"
+#include <QWidget>
 #include "core/core.h"
 #include "core/frontend/emu_window.h"
 
@@ -21,6 +20,8 @@ class QTouchEvent;
 class GGLWidgetInternal;
 class GMainWindow;
 class GRenderWindow;
+class QSurface;
+class QOpenGLContext;
 
 class EmuThread final : public QThread {
     Q_OBJECT
@@ -116,25 +117,21 @@ public:
     void MakeCurrent() override;
     void DoneCurrent() override;
     void PollEvents() override;
+    std::unique_ptr<Frontend::GraphicsContext> CreateSharedContext() const override;
+
+    void ForwardKeyPressEvent(QKeyEvent* event);
+    void ForwardKeyReleaseEvent(QKeyEvent* event);
 
     void BackupGeometry();
     void RestoreGeometry();
     void restoreGeometry(const QByteArray& geometry); // overridden
     QByteArray saveGeometry();                        // overridden
 
-    qreal windowPixelRatio() const;
+    qreal GetWindowPixelRatio() const;
+    std::pair<unsigned, unsigned> ScaleTouch(const QPointF pos) const;
 
     void closeEvent(QCloseEvent* event) override;
-
-    void keyPressEvent(QKeyEvent* event) override;
-    void keyReleaseEvent(QKeyEvent* event) override;
-
-    void mousePressEvent(QMouseEvent* event) override;
-    void mouseMoveEvent(QMouseEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
-
     bool event(QEvent* event) override;
-
     void focusOutEvent(QFocusEvent* event) override;
 
     void OnClientAreaResized(u32 width, u32 height);
@@ -162,11 +159,17 @@ private:
 
     void OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal_size) override;
 
-    GGLWidgetInternal* child;
+    QWidget* container = nullptr;
+    GGLWidgetInternal* child = nullptr;
 
     QByteArray geometry;
 
     EmuThread* emu_thread;
+    // Context that backs the GGLWidgetInternal (and will be used by core to render)
+    std::unique_ptr<QOpenGLContext> context;
+    // Context that will be shared between all newly created contexts. This should never be made
+    // current
+    std::unique_ptr<QOpenGLContext> shared_context;
 
     /// Temporary storage of the screenshot taken
     QImage screenshot_image;
