@@ -719,7 +719,7 @@ bool GMainWindow::LoadROM(const QString& filename) {
         ShutdownGame();
 
     render_window->InitRenderTarget();
-    render_window->MakeCurrent();
+    render_window->otherMakeCurrent();
 
     const QString below_gl33_title = tr("OpenGL 3.3 Unsupported");
     const QString below_gl33_message = tr("Your GPU may not support OpenGL 3.3, or you do not "
@@ -844,6 +844,8 @@ void GMainWindow::BootGame(const QString& filename) {
         return;
 
     // Create and start the emulation thread
+    render_window->DoneCurrent();
+    render_window->otherDoneCurrent();
     emu_thread = std::make_unique<EmuThread>(render_window);
     emit EmulationStarting(emu_thread.get());
     render_window->moveContext();
