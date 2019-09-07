@@ -223,7 +223,7 @@ void GRenderWindow::PollEvents() {}
 void GRenderWindow::OnFramebufferSizeChanged() {
     // Screen changes potentially incur a change in screen DPI, hence we should update the
     // framebuffer size
-    const qreal pixel_ratio = windowPixelRatio();
+    const qreal pixel_ratio = GetWindowPixelRatio();
     const u32 width = child->QPaintDevice::width() * pixel_ratio;
     const u32 height = child->QPaintDevice::height() * pixel_ratio;
     UpdateCurrentFramebufferLayout(width, height);
@@ -272,7 +272,7 @@ qreal GRenderWindow::GetWindowPixelRatio() const {
 }
 
 std::pair<u32, u32> GRenderWindow::ScaleTouch(const QPointF pos) const {
-    const qreal pixel_ratio = windowPixelRatio();
+    const qreal pixel_ratio = GetWindowPixelRatio();
     return {static_cast<u32>(std::max(std::round(pos.x() * pixel_ratio), qreal{0.0})),
             static_cast<u32>(std::max(std::round(pos.y() * pixel_ratio), qreal{0.0}))};
 }
