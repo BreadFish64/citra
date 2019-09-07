@@ -237,7 +237,7 @@ void RendererOpenGL::SwapBuffers() {
     }
     for (auto& screen_info : GetScreenInfos())
         screen_info.texture.resource.ExchangePushTex();
-
+    glFlush();
     // DrawScreens(render_window.GetFramebufferLayout());
     m_current_frame++;
 
@@ -546,16 +546,13 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
                 1.0 / (screen_info.texture.width * scale_factor),
                 1.0 / (screen_info.texture.height * scale_factor));
     glUniform4f(uniform_o_resolution, h, w, 1.0f / h, 1.0f / w);
-    state.texture_units[0].texture_2d = screen_info.texture.resource.GetPopTex();
-    state.texture_units[0].sampler = filter_sampler.handle;
-    state.Apply();
+    glFlush();
+    glActiveTexture(GL_TEXTURE24);
+    glBindTexture(GL_TEXTURE_2D, screen_info.texture.resource.GetPopTex());
+    glBindSampler(0, filter_sampler.handle);
 
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices.data());
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-    state.texture_units[0].texture_2d = 0;
-    state.texture_units[0].sampler = 0;
-    state.Apply();
 }
 
 /**

@@ -191,8 +191,8 @@ void GRenderWindow::SwapBuffers() {
     // - The Qt debug runtime prints a bogus warning on the console if `makeCurrent` wasn't called
     // since the last time `swapBuffers` was executed;
     // - On macOS, if `makeCurrent` isn't called explicitly, resizing the buffer breaks.
-    // context->makeCurrent(child);
     while (true) {
+        context->makeCurrent(child);
         if (!VideoCore::g_renderer)
             continue;
         OpenGL::RendererOpenGL& renderer =
@@ -445,6 +445,8 @@ void GRenderWindow::showEvent(QShowEvent* event) {
 
 GGLContext::GGLContext(QOpenGLContext* shared_context)
     : context{std::make_unique<QOpenGLContext>(shared_context)} {
+    context->create();
+    context->setShareContext((QOpenGLContext*)context->parent());
     surface.setFormat(shared_context->format());
     surface.create();
 }
