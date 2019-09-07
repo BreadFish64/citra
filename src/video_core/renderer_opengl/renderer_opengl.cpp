@@ -152,25 +152,25 @@ void RendererOpenGL::SwapBuffers() {
 
         if (color_fill.is_enabled) {
             LoadColorToActiveGLTexture(color_fill.color_r, color_fill.color_g, color_fill.color_b,
-                                       screen_infos[i].texture);
+                                       GetScreenInfos()[i].texture);
 
             // Resize the texture in case the framebuffer size has changed
-            screen_infos[i].texture.width = 1;
-            screen_infos[i].texture.height = 1;
+            GetScreenInfos()[i].texture.width = 1;
+            GetScreenInfos()[i].texture.height = 1;
         } else {
-            if (screen_infos[i].texture.width != (GLsizei)framebuffer.width ||
-                screen_infos[i].texture.height != (GLsizei)framebuffer.height ||
-                screen_infos[i].texture.format != framebuffer.color_format) {
+            if (GetScreenInfos()[i].texture.width != (GLsizei)framebuffer.width ||
+                GetScreenInfos()[i].texture.height != (GLsizei)framebuffer.height ||
+                GetScreenInfos()[i].texture.format != framebuffer.color_format) {
                 // Reallocate texture if the framebuffer size has changed.
                 // This is expected to not happen very often and hence should not be a
                 // performance problem.
-                ConfigureFramebufferTexture(screen_infos[i].texture, framebuffer);
+                ConfigureFramebufferTexture(GetScreenInfos()[i].texture, framebuffer);
             }
-            LoadFBToScreenInfo(framebuffer, screen_infos[i], i == 1);
+            LoadFBToScreenInfo(framebuffer, GetScreenInfos()[i], i == 1);
 
             // Resize the texture in case the framebuffer size has changed
-            screen_infos[i].texture.width = framebuffer.width;
-            screen_infos[i].texture.height = framebuffer.height;
+            GetScreenInfos()[i].texture.width = framebuffer.width;
+            GetScreenInfos()[i].texture.height = framebuffer.height;
         }
     }
 
@@ -235,15 +235,17 @@ void RendererOpenGL::SwapBuffers() {
         current_pbo = (current_pbo + 1) % 2;
         next_pbo = (current_pbo + 1) % 2;
     }
+    for (auto& screen_info : GetScreenInfos())
+        screen_info.texture.resource.ExchangePushTex();
 
-    DrawScreens(render_window.GetFramebufferLayout());
+    // DrawScreens(render_window.GetFramebufferLayout());
     m_current_frame++;
 
     Core::System::GetInstance().perf_stats->EndSystemFrame();
 
     // Swap buffers
     render_window.PollEvents();
-    render_window.SwapBuffers();
+    // render_window.SwapBuffers();
 
     Core::System::GetInstance().frame_limiter.DoFrameLimiting(
         Core::System::GetInstance().CoreTiming().GetGlobalTimeUs());
@@ -288,14 +290,14 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
     if (!Rasterizer()->AccelerateDisplay(framebuffer, framebuffer_addr,
                                          static_cast<u32>(pixel_stride), screen_info)) {
         // Reset the screen info's display texture to its own permanent texture
-        screen_info.display_texture = screen_info.texture.resource.handle;
+        // screen_info.display_texture = screen_info.texture.resource.GetPushTex();
         screen_info.display_texcoords = Common::Rectangle<float>(0.f, 0.f, 1.f, 1.f);
 
         Memory::RasterizerFlushRegion(framebuffer_addr, framebuffer.stride * framebuffer.height);
 
         const u8* framebuffer_data = VideoCore::g_memory->GetPhysicalPointer(framebuffer_addr);
 
-        state.texture_units[0].texture_2d = screen_info.texture.resource.handle;
+        state.texture_units[0].texture_2d = screen_info.texture.resource.GetPushTex();
         state.Apply();
 
         glActiveTexture(GL_TEXTURE0);
@@ -323,7 +325,7 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
  */
 void RendererOpenGL::LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b,
                                                 const TextureInfo& texture) {
-    state.texture_units[0].texture_2d = texture.resource.handle;
+    state.texture_units[0].texture_2d = texture.resource.GetPushTex();
     state.Apply();
 
     glActiveTexture(GL_TEXTURE0);
@@ -368,24 +370,29 @@ void RendererOpenGL::InitOpenGLObjects() {
     glEnableVertexAttribArray(attrib_position);
     glEnableVertexAttribArray(attrib_tex_coord);
 
+    screen_infos = std::make_unique<std::array<ScreenInfo, 3>>();
     // Allocate textures for each screen
-    for (auto& screen_info : screen_infos) {
-        screen_info.texture.resource.Create();
+    for (auto& screen_info : GetScreenInfos()) {
+        // screen_info.texture.resource.Create();
 
         // Allocation of storage is deferred until the first frame, when we
         // know the framebuffer size.
 
-        state.texture_units[0].texture_2d = screen_info.texture.resource.handle;
-        state.Apply();
+        auto InitTex = [this, &screen_info](GLuint handle) {
+            state.texture_units[0].texture_2d = handle;
+            state.Apply();
 
-        glActiveTexture(GL_TEXTURE0);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glActiveTexture(GL_TEXTURE0);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        };
 
-        screen_info.display_texture = screen_info.texture.resource.handle;
+        InitTex(screen_info.texture.resource.GetPushTex());
+        InitTex(screen_info.texture.resource.GetPopTex());
+        InitTex(screen_info.texture.resource.ExchangePushTex());
     }
 
     state.texture_units[0].texture_2d = 0;
@@ -499,12 +506,17 @@ void RendererOpenGL::ConfigureFramebufferTexture(TextureInfo& texture,
         UNIMPLEMENTED();
     }
 
-    state.texture_units[0].texture_2d = texture.resource.handle;
-    state.Apply();
+    auto ConfigTex = [this, &texture, &internal_format](GLuint handle) {
+        state.texture_units[0].texture_2d = handle;
+        state.Apply();
 
-    glActiveTexture(GL_TEXTURE0);
-    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, texture.width, texture.height, 0,
-                 texture.gl_format, texture.gl_type, nullptr);
+        glActiveTexture(GL_TEXTURE0);
+        glTexImage2D(GL_TEXTURE_2D, 0, internal_format, texture.width, texture.height, 0,
+                     texture.gl_format, texture.gl_type, nullptr);
+    };
+    ConfigTex(texture.resource.GetPushTex());
+    ConfigTex(texture.resource.GetPopTex());
+    ConfigTex(texture.resource.ExchangePushTex());
 
     state.texture_units[0].texture_2d = 0;
     state.Apply();
@@ -534,7 +546,7 @@ void RendererOpenGL::DrawSingleScreenRotated(const ScreenInfo& screen_info, floa
                 1.0 / (screen_info.texture.width * scale_factor),
                 1.0 / (screen_info.texture.height * scale_factor));
     glUniform4f(uniform_o_resolution, h, w, 1.0f / h, 1.0f / w);
-    state.texture_units[0].texture_2d = screen_info.display_texture;
+    state.texture_units[0].texture_2d = screen_info.texture.resource.GetPopTex();
     state.texture_units[0].sampler = filter_sampler.handle;
     state.Apply();
 
@@ -568,8 +580,8 @@ void RendererOpenGL::DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_in
                 1.0 / (screen_info_l.texture.width * scale_factor),
                 1.0 / (screen_info_l.texture.height * scale_factor));
     glUniform4f(uniform_o_resolution, h, w, 1.0f / h, 1.0f / w);
-    state.texture_units[0].texture_2d = screen_info_l.display_texture;
-    state.texture_units[1].texture_2d = screen_info_r.display_texture;
+    state.texture_units[0].texture_2d = screen_info_l.texture.resource.GetPopTex();
+    state.texture_units[1].texture_2d = screen_info_r.texture.resource.GetPopTex();
     state.texture_units[0].sampler = filter_sampler.handle;
     state.texture_units[1].sampler = filter_sampler.handle;
     state.Apply();
@@ -628,40 +640,41 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
     glUniform1i(uniform_layer, 0);
     if (layout.top_screen_enabled) {
         if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
-            DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left, (float)top_screen.top,
-                                    (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
+            DrawSingleScreenRotated(GetScreenInfos()[0], (float)top_screen.left,
+                                    (float)top_screen.top, (float)top_screen.GetWidth(),
+                                    (float)top_screen.GetHeight());
         } else if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
-            DrawSingleScreenRotated(screen_infos[0], (float)top_screen.left / 2,
+            DrawSingleScreenRotated(GetScreenInfos()[0], (float)top_screen.left / 2,
                                     (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                     (float)top_screen.GetHeight());
             glUniform1i(uniform_layer, 1);
-            DrawSingleScreenRotated(screen_infos[1],
+            DrawSingleScreenRotated(GetScreenInfos()[1],
                                     ((float)top_screen.left / 2) + ((float)layout.width / 2),
                                     (float)top_screen.top, (float)top_screen.GetWidth() / 2,
                                     (float)top_screen.GetHeight());
         } else if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
             DrawSingleScreenAnaglyphRotated(
-                screen_infos[0], screen_infos[1], (float)top_screen.left, (float)top_screen.top,
-                (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
+                GetScreenInfos()[0], GetScreenInfos()[1], (float)top_screen.left,
+                (float)top_screen.top, (float)top_screen.GetWidth(), (float)top_screen.GetHeight());
         }
     }
     glUniform1i(uniform_layer, 0);
     if (layout.bottom_screen_enabled) {
         if (Settings::values.render_3d == Settings::StereoRenderOption::Off) {
-            DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left,
+            DrawSingleScreenRotated(GetScreenInfos()[2], (float)bottom_screen.left,
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth(),
                                     (float)bottom_screen.GetHeight());
         } else if (Settings::values.render_3d == Settings::StereoRenderOption::SideBySide) {
-            DrawSingleScreenRotated(screen_infos[2], (float)bottom_screen.left / 2,
+            DrawSingleScreenRotated(GetScreenInfos()[2], (float)bottom_screen.left / 2,
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                     (float)bottom_screen.GetHeight());
             glUniform1i(uniform_layer, 1);
-            DrawSingleScreenRotated(screen_infos[2],
+            DrawSingleScreenRotated(GetScreenInfos()[2],
                                     ((float)bottom_screen.left / 2) + ((float)layout.width / 2),
                                     (float)bottom_screen.top, (float)bottom_screen.GetWidth() / 2,
                                     (float)bottom_screen.GetHeight());
         } else if (Settings::values.render_3d == Settings::StereoRenderOption::Anaglyph) {
-            DrawSingleScreenAnaglyphRotated(screen_infos[2], screen_infos[2],
+            DrawSingleScreenAnaglyphRotated(GetScreenInfos()[2], GetScreenInfos()[2],
                                             (float)bottom_screen.left, (float)bottom_screen.top,
                                             (float)bottom_screen.GetWidth(),
                                             (float)bottom_screen.GetHeight());
@@ -770,6 +783,7 @@ Core::System::ResultStatus RendererOpenGL::Init() {
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 

@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <QImage>
+#include <QOffscreenSurface>
 #include <QThread>
 #include <QWidget>
 #include "core/core.h"
@@ -105,6 +106,23 @@ signals:
     void ErrorThrown(Core::System::ResultStatus, std::string);
 };
 
+class GGLContext : public Frontend::GraphicsContext {
+public:
+    explicit GGLContext(QOpenGLContext* shared_context);
+
+    void MakeCurrent() override;
+
+    void DoneCurrent() override;
+
+    void SwapBuffers() override {}
+
+    void moveToThread(QThread* thread);
+
+private:
+    std::unique_ptr<QOpenGLContext> context;
+    QOffscreenSurface surface;
+};
+
 class GRenderWindow : public QWidget, public Frontend::EmuWindow {
     Q_OBJECT
 
@@ -140,6 +158,11 @@ public:
 
     void CaptureScreenshot(u32 res_scale, const QString& screenshot_path);
 
+    // Context that backs the GGLWidgetInternal (and will be used by core to render)
+    std::unique_ptr<QOpenGLContext> context;
+
+    void otherMakeCurrent();
+    void otherDoneCurrent();
 public slots:
     void moveContext(); // overridden
 
@@ -164,11 +187,12 @@ private:
     QByteArray geometry;
 
     EmuThread* emu_thread;
-    // Context that backs the GGLWidgetInternal (and will be used by core to render)
-    std::unique_ptr<QOpenGLContext> context;
+
     // Context that will be shared between all newly created contexts. This should never be made
     // current
     std::unique_ptr<QOpenGLContext> shared_context;
+
+    std::unique_ptr<GGLContext> core_context;
 
     /// Temporary storage of the screenshot taken
     QImage screenshot_image;

@@ -2,6 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "video_core/renderer_opengl/renderer_opengl.h"
+#include "video_core/video_core.h"
+
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -23,15 +26,15 @@
 #include "input_common/main.h"
 #include "input_common/motion_emu.h"
 #include "network/network.h"
-#include "video_core/video_core.h"
 
 EmuThread::EmuThread(GRenderWindow* render_window) : render_window(render_window) {}
 
 EmuThread::~EmuThread() = default;
 
 void EmuThread::run() {
-    render_window->MakeCurrent();
+    std::thread thread([this]() { render_window->SwapBuffers(); });
 
+    render_window->MakeCurrent();
     MicroProfileOnThreadCreate("EmuThread");
 
     // Holds whether the cpu was running during the last iteration,
@@ -83,29 +86,6 @@ void EmuThread::run() {
 
     render_window->moveContext();
 }
-
-class GGLContext : public Frontend::GraphicsContext {
-public:
-    explicit GGLContext(QOpenGLContext* shared_context)
-        : context{std::make_unique<QOpenGLContext>(shared_context)} {
-        surface.setFormat(shared_context->format());
-        surface.create();
-    }
-
-    void MakeCurrent() override {
-        context->makeCurrent(&surface);
-    }
-
-    void DoneCurrent() override {
-        context->doneCurrent();
-    }
-
-    void SwapBuffers() override {}
-
-private:
-    std::unique_ptr<QOpenGLContext> context;
-    QOffscreenSurface surface;
-};
 
 // This class overrides paintEvent and resizeEvent to prevent the GUI thread from stealing GL
 // context.
@@ -202,7 +182,6 @@ void GRenderWindow::moveContext() {
     auto thread = (QThread::currentThread() == qApp->thread() && emu_thread != nullptr)
                       ? emu_thread
                       : qApp->thread();
-    context->moveToThread(thread);
 }
 
 void GRenderWindow::SwapBuffers() {
@@ -211,18 +190,27 @@ void GRenderWindow::SwapBuffers() {
     // However:
     // - The Qt debug runtime prints a bogus warning on the console if `makeCurrent` wasn't called
     // since the last time `swapBuffers` was executed;
-    // - On macOS, if `makeCurrent` isn't called explicitely, resizing the buffer breaks.
-    context->makeCurrent(child);
+    // - On macOS, if `makeCurrent` isn't called explicitly, resizing the buffer breaks.
+    // context->makeCurrent(child);
+    while (true) {
+        if (!VideoCore::g_renderer)
+            continue;
+        OpenGL::RendererOpenGL& renderer =
+            dynamic_cast<OpenGL::RendererOpenGL&>(*VideoCore::g_renderer);
+        for (auto& screen_info : renderer.GetScreenInfos())
+            screen_info.texture.resource.ExchangePopTex();
+        renderer.DrawScreens(GetFramebufferLayout());
 
-    context->swapBuffers(child);
+        context->swapBuffers(child);
+    }
 }
 
 void GRenderWindow::MakeCurrent() {
-    context->makeCurrent(child);
+    core_context->MakeCurrent();
 }
 
 void GRenderWindow::DoneCurrent() {
-    context->doneCurrent();
+    core_context->DoneCurrent();
 }
 
 void GRenderWindow::PollEvents() {}
@@ -376,6 +364,7 @@ void GRenderWindow::InitRenderTarget() {
     context->setShareContext(shared_context.get());
     context->setFormat(fmt);
     context->create();
+    core_context.reset(dynamic_cast<GGLContext*>(CreateSharedContext().release()));
     fmt.setSwapInterval(Settings::values.vsync_enabled);
 
     child = new GGLWidgetInternal(this, shared_context.get());
@@ -428,6 +417,14 @@ void GRenderWindow::OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal
     setMinimumSize(minimal_size.first, minimal_size.second);
 }
 
+void GRenderWindow::otherMakeCurrent() {
+    context->makeCurrent(child);
+}
+
+void GRenderWindow::otherDoneCurrent() {
+    context->doneCurrent();
+}
+
 void GRenderWindow::OnEmulationStarting(EmuThread* emu_thread) {
     this->emu_thread = emu_thread;
     child->DisablePainting();
@@ -445,3 +442,19 @@ void GRenderWindow::showEvent(QShowEvent* event) {
     connect(windowHandle(), &QWindow::screenChanged, this, &GRenderWindow::OnFramebufferSizeChanged,
             Qt::UniqueConnection);
 }
+
+GGLContext::GGLContext(QOpenGLContext* shared_context)
+    : context{std::make_unique<QOpenGLContext>(shared_context)} {
+    surface.setFormat(shared_context->format());
+    surface.create();
+}
+
+inline void GGLContext::MakeCurrent() {
+    context->makeCurrent(&surface);
+}
+
+inline void GGLContext::DoneCurrent() {
+    context->doneCurrent();
+}
+
+inline void GGLContext::moveToThread(QThread* thread) {}

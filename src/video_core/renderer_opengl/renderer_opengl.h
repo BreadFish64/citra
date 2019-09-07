@@ -19,9 +19,49 @@ struct FramebufferLayout;
 
 namespace OpenGL {
 
+struct TextureMailbox {
+    GLuint draw_tex = NULL, present_tex = NULL;
+    std::atomic<GLuint> off_tex = NULL;
+
+    TextureMailbox() {
+        GLuint textures[3];
+        glGenTextures(3, textures);
+        draw_tex = textures[0];
+        present_tex = textures[1];
+        off_tex = textures[2];
+    }
+
+    ~TextureMailbox() {
+        GLuint textures[3]{draw_tex, present_tex, off_tex};
+        glDeleteTextures(3, textures);
+    }
+
+    GLint ExchangePopTex() {
+        present_tex = off_tex.exchange(present_tex);
+        return present_tex;
+    }
+
+    GLint ExchangePushTex() {
+        draw_tex = off_tex.exchange(draw_tex);
+        return draw_tex;
+    }
+
+    GLint GetPopTex() const {
+        return present_tex;
+    }
+
+    GLint GetPushTex() const {
+        return draw_tex;
+    }
+
+    void SetPushTex(GLuint handle) {
+        draw_tex = handle;
+    }
+};
+
 /// Structure used for storing information about the textures for each 3DS screen
 struct TextureInfo {
-    OGLTexture resource;
+    TextureMailbox resource;
     GLsizei width;
     GLsizei height;
     GPU::Regs::PixelFormat format;
@@ -31,7 +71,7 @@ struct TextureInfo {
 
 /// Structure used for storing information about the display target for each 3DS screen
 struct ScreenInfo {
-    GLuint display_texture;
+    // GLuint display_texture;
     Common::Rectangle<float> display_texcoords;
     TextureInfo texture;
 };
@@ -56,13 +96,15 @@ public:
     /// Cleans up after video dumping is ended
     void CleanupVideoDumping() override;
 
+    void DrawScreens(const Layout::FramebufferLayout& layout);
+
 private:
     void InitOpenGLObjects();
     void ReloadSampler();
     void ReloadShader();
     void ConfigureFramebufferTexture(TextureInfo& texture,
                                      const GPU::Regs::FramebufferConfig& framebuffer);
-    void DrawScreens(const Layout::FramebufferLayout& layout);
+
     void DrawSingleScreenRotated(const ScreenInfo& screen_info, float x, float y, float w, float h);
     void DrawSingleScreenAnaglyphRotated(const ScreenInfo& screen_info_l,
                                          const ScreenInfo& screen_info_r, float x, float y, float w,
@@ -78,6 +120,9 @@ private:
     void InitVideoDumpingGLObjects();
     void ReleaseVideoDumpingGLObjects();
 
+    /// Display information for top and bottom screens respectively
+    std::unique_ptr<std::array<ScreenInfo, 3>> screen_infos;
+
     OpenGLState state;
 
     // OpenGL object IDs
@@ -86,9 +131,6 @@ private:
     OGLProgram shader;
     OGLFramebuffer screenshot_framebuffer;
     OGLSampler filter_sampler;
-
-    /// Display information for top and bottom screens respectively
-    std::array<ScreenInfo, 3> screen_infos;
 
     // Shader uniform location indices
     GLuint uniform_modelview_matrix;
@@ -117,6 +159,11 @@ private:
     std::array<OGLBuffer, 2> frame_dumping_pbos;
     GLuint current_pbo = 1;
     GLuint next_pbo = 0;
+
+public:
+    std::array<ScreenInfo, 3>& GetScreenInfos() {
+        return *screen_infos;
+    };
 };
 
 } // namespace OpenGL
