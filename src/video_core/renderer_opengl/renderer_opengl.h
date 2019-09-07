@@ -29,6 +29,7 @@ struct TextureMailbox {
         draw_tex = textures[0];
         present_tex = textures[1];
         off_tex = textures[2];
+        glFlush();
     }
 
     ~TextureMailbox() {
@@ -43,6 +44,7 @@ struct TextureMailbox {
 
     GLint ExchangePushTex() {
         draw_tex = off_tex.exchange(draw_tex);
+        glFlush();
         return draw_tex;
     }
 
