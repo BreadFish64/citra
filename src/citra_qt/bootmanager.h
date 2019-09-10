@@ -7,7 +7,8 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <QGLWidget>
+#include <QOpenGLWidget>
+#include <QOffscreenSurface>
 #include <QImage>
 #include <QThread>
 #include "common/thread.h"
@@ -17,10 +18,24 @@
 class QKeyEvent;
 class QScreen;
 class QTouchEvent;
+class QSurface;
+class QOpenGLContext;
 
-class GGLWidgetInternal;
 class GMainWindow;
 class GRenderWindow;
+
+class GGLContext : public Frontend::GraphicsContext {
+public:
+    explicit GGLContext(QOpenGLContext* shared_context);
+    
+    void MakeCurrent() override;
+    
+    void DoneCurrent() override;
+    
+private:
+    std::unique_ptr<QOpenGLContext> context;
+    QOffscreenSurface surface;
+};
 
 class EmuThread final : public QThread {
     Q_OBJECT
@@ -104,19 +119,21 @@ signals:
     void ErrorThrown(Core::System::ResultStatus, std::string);
 };
 
-class GRenderWindow : public QWidget, public Frontend::EmuWindow {
+class GRenderWindow : public QOpenGLWidget, public Frontend::EmuWindow {
     Q_OBJECT
 
 public:
     GRenderWindow(QWidget* parent, EmuThread* emu_thread);
     ~GRenderWindow() override;
 
-    // EmuWindow implementation
-    void SwapBuffers() override;
+    // EmuWindow implementation.
     void MakeCurrent() override;
     void DoneCurrent() override;
     void PollEvents() override;
+    std::unique_ptr<Frontend::GraphicsContext> CreateSharedContext() const override;
 
+    void paintGL() override;
+    
     void BackupGeometry();
     void RestoreGeometry();
     void restoreGeometry(const QByteArray& geometry); // overridden
@@ -144,7 +161,6 @@ public:
     void CaptureScreenshot(u32 res_scale, const QString& screenshot_path);
 
 public slots:
-    void moveContext(); // overridden
 
     void OnEmulationStarting(EmuThread* emu_thread);
     void OnEmulationStopping();
@@ -162,7 +178,7 @@ private:
 
     void OnMinimalClientAreaChangeRequest(std::pair<u32, u32> minimal_size) override;
 
-    GGLWidgetInternal* child;
+    std::unique_ptr<GraphicsContext> core_context;
 
     QByteArray geometry;
 

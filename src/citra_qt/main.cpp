@@ -1993,7 +1993,8 @@ int main(int argc, char* argv[]) {
     std::string bin_path = FileUtil::GetBundleDirectory() + DIR_SEP + "..";
     chdir(bin_path.c_str());
 #endif
-
+    QCoreApplication::setAttribute(Qt::AA_DontCheckOpenGLContextThreadAffinity);
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
 
     // Qt changes the locale and causes issues in float conversion using std::to_string() when

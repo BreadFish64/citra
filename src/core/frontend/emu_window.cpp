@@ -9,7 +9,37 @@
 #include "core/settings.h"
 
 namespace Frontend {
-
+    
+class TextureMailbox {
+public:
+    u32 draw_tex = 0, present_tex = 0;
+    std::atomic<u32> off_tex = 0;
+    
+    TextureMailbox() {}
+    
+    ~TextureMailbox() {}
+    
+    u32 ExchangePresentTex() {
+        present_tex = off_tex.exchange(present_tex);
+        return present_tex;
+    }
+    
+    u32 ExchangeDrawTex() {
+        draw_tex = off_tex.exchange(draw_tex);
+        return draw_tex;
+    }
+    
+    u32 GetPresentationTex() const {
+        return present_tex;
+    }
+    
+    u32 GetDrawTex() const {
+        return draw_tex;
+    }
+};
+    
+GraphicsContext::~GraphicsContext() = default;
+    
 class EmuWindow::TouchState : public Input::Factory<Input::TouchDevice>,
                               public std::enable_shared_from_this<TouchState> {
 public:
@@ -47,6 +77,7 @@ EmuWindow::EmuWindow() {
     active_config = config;
     touch_state = std::make_shared<TouchState>();
     Input::RegisterFactory<Input::TouchDevice>("emu_window", touch_state);
+    mailbox = std::make_unique<TextureMailbox>();
 }
 
 EmuWindow::~EmuWindow() {
@@ -160,4 +191,18 @@ void EmuWindow::UpdateCurrentFramebufferLayout(unsigned width, unsigned height) 
     NotifyFramebufferLayoutChanged(layout);
 }
 
+void EmuWindow::InitRenderQueue(u32 draw, u32 present, u32 off) {
+    mailbox->draw_tex = draw;
+    mailbox->present_tex = present;
+    mailbox->off_tex = off;
+}
+
+u32 EmuWindow::GetDrawTexture() {
+    return mailbox->ExchangeDrawTex();
+}
+
+u32 EmuWindow::GetPresentTexture() {
+    return mailbox->ExchangePresentTex();
+}
+    
 } // namespace Frontend

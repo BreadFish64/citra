@@ -11,7 +11,25 @@
 #include "core/frontend/framebuffer_layout.h"
 
 namespace Frontend {
-
+    
+class TextureMailbox;
+    
+/**
+ * Represents a graphics context that can be used for background computation or drawing. If the
+ * graphics backend doesn't require the context, then the implementation of these methods can be
+ * stubs
+ */
+class GraphicsContext {
+public:
+    virtual ~GraphicsContext();
+    
+    /// Makes the graphics context current for the caller thread
+    virtual void MakeCurrent() = 0;
+    
+    /// Releases (dunno if this is the "right" word) the context from the caller thread
+    virtual void DoneCurrent() = 0;
+};
+    
 /**
  * Abstraction class used to provide an interface between emulation code and the frontend
  * (e.g. SDL, QGLWidget, GLFW, etc...).
@@ -30,7 +48,7 @@ namespace Frontend {
  * - DO NOT TREAT THIS CLASS AS A GUI TOOLKIT ABSTRACTION LAYER. That's not what it is. Please
  *   re-read the upper points again and think about it if you don't see this.
  */
-class EmuWindow {
+class EmuWindow : public GraphicsContext {
 public:
     /// Data structure to store emuwindow configuration
     struct WindowConfig {
@@ -40,17 +58,27 @@ public:
         std::pair<unsigned, unsigned> min_client_area_size;
     };
 
-    /// Swap buffers to display the next frame
-    virtual void SwapBuffers() = 0;
-
+    void InitRenderQueue(u32 draw, u32 present, u32 off);
+    
+    u32 GetDrawTexture();
+    
+    u32 GetPresentTexture();
+    
     /// Polls window events
     virtual void PollEvents() = 0;
-
-    /// Makes the graphics context current for the caller thread
-    virtual void MakeCurrent() = 0;
-
-    /// Releases (dunno if this is the "right" word) the GLFW context from the caller thread
-    virtual void DoneCurrent() = 0;
+    
+    /**
+     * Returns a GraphicsContext that the frontend provides that is shared with the emu window. This
+     * context can be used from other threads for background graphics computation. If the frontend
+     * is using a graphics backend that doesn't need anything specific to run on a different thread,
+     * then it can use a stubbed implemenation for GraphicsContext.
+     *
+     * If the return value is null, then the core should assume that the frontend cannot provide a
+     * Shared Context
+     */
+    virtual std::unique_ptr<GraphicsContext> CreateSharedContext() const {
+        return nullptr;
+    }
 
     /**
      * Signal that a touch pressed event has occurred (e.g. mouse click pressed)
@@ -166,6 +194,8 @@ private:
      * Clip the provided coordinates to be inside the touchscreen area.
      */
     std::tuple<unsigned, unsigned> ClipToTouchScreen(unsigned new_x, unsigned new_y) const;
+    
+    std::unique_ptr<TextureMailbox> mailbox;
 };
 
 } // namespace Frontend

@@ -117,6 +117,10 @@ private:
     std::array<OGLBuffer, 2> frame_dumping_pbos;
     GLuint current_pbo = 1;
     GLuint next_pbo = 0;
+    
+    // Textures used for presentation
+    OGLFramebuffer presentation_framebuffer;
+    std::array<OGLTexture, 3> presentation_textures{};
 };
 
 } // namespace OpenGL

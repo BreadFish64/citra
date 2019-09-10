@@ -53,7 +53,7 @@ void main() {
 
 static const char fragment_shader[] = R"(
 in vec2 frag_tex_coord;
-out vec4 color;
+layout(location = 0) out vec3 color;
 
 uniform vec4 i_resolution;
 uniform vec4 o_resolution;
@@ -138,6 +138,8 @@ void RendererOpenGL::SwapBuffers() {
     // Maintain the rasterizer's state as a priority
     OpenGLState prev_state = OpenGLState::GetCurState();
     state.Apply();
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, presentation_framebuffer.handle);
 
     for (int i : {0, 1, 2}) {
         int fb_id = i == 2 ? 1 : 0;
@@ -230,20 +232,23 @@ void RendererOpenGL::SwapBuffers() {
 
         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         current_pbo = (current_pbo + 1) % 2;
         next_pbo = (current_pbo + 1) % 2;
     }
 
+    glBindFramebuffer(GL_FRAMEBUFFER, presentation_framebuffer.handle);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, render_window.GetDrawTexture(), 0);
+    
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        LOG_CRITICAL(Render_OpenGL, "hol up");
+    }
     DrawScreens(render_window.GetFramebufferLayout());
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     m_current_frame++;
 
     Core::System::GetInstance().perf_stats->EndSystemFrame();
 
-    // Swap buffers
     render_window.PollEvents();
-    render_window.SwapBuffers();
 
     Core::System::GetInstance().frame_limiter.DoFrameLimiting(
         Core::System::GetInstance().CoreTiming().GetGlobalTimeUs());
@@ -388,6 +393,11 @@ void RendererOpenGL::InitOpenGLObjects() {
         screen_info.display_texture = screen_info.texture.resource.handle;
     }
 
+    presentation_framebuffer.Create();
+    presentation_textures[0].Create();
+    presentation_textures[1].Create();
+    presentation_textures[2].Create();
+    render_window.InitRenderQueue(presentation_textures[0].handle, presentation_textures[1].handle, presentation_textures[2].handle);
     state.texture_units[0].texture_2d = 0;
     state.Apply();
 }
