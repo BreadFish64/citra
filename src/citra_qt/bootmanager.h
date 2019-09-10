@@ -192,7 +192,7 @@ private:
     // current
     std::unique_ptr<QOpenGLContext> shared_context;
 
-    std::unique_ptr<GGLContext> core_context;
+    std::unique_ptr<Frontend::GraphicsContext> core_context;
 
     /// Temporary storage of the screenshot taken
     QImage screenshot_image;

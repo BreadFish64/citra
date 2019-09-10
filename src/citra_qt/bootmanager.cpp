@@ -32,7 +32,7 @@ EmuThread::EmuThread(GRenderWindow* render_window) : render_window(render_window
 EmuThread::~EmuThread() = default;
 
 void EmuThread::run() {
-    std::thread thread([this]() { render_window->SwapBuffers(); });
+    std::unique_ptr<QThread> thread(QThread::create([this]() { render_window->SwapBuffers(); }));
 
     render_window->MakeCurrent();
     MicroProfileOnThreadCreate("EmuThread");
@@ -77,6 +77,7 @@ void EmuThread::run() {
         }
     }
 
+    thread->terminate();
     // Shutdown the core emulation
     Core::System::GetInstance().Shutdown();
 
@@ -84,7 +85,7 @@ void EmuThread::run() {
     MicroProfileOnThreadExit();
 #endif
 
-    render_window->moveContext();
+    //  render_window->moveContext();
 }
 
 // This class overrides paintEvent and resizeEvent to prevent the GUI thread from stealing GL
@@ -193,13 +194,16 @@ void GRenderWindow::SwapBuffers() {
     // - On macOS, if `makeCurrent` isn't called explicitly, resizing the buffer breaks.
     while (true) {
         context->makeCurrent(child);
-        if (!VideoCore::g_renderer)
+        if (!VideoCore::g_renderer || !child->isExposed())
             continue;
         OpenGL::RendererOpenGL& renderer =
             dynamic_cast<OpenGL::RendererOpenGL&>(*VideoCore::g_renderer);
         for (auto& screen_info : renderer.GetScreenInfos())
             screen_info.texture.resource.ExchangePopTex();
         renderer.DrawScreens(GetFramebufferLayout());
+
+        // LOG_CRITICAL(Frontend, "{}", context->surface()->surfaceType());
+        // LOG_CRITICAL(Frontend, "{}", child->surfaceType());
 
         context->swapBuffers(child);
     }
@@ -364,7 +368,7 @@ void GRenderWindow::InitRenderTarget() {
     context->setShareContext(shared_context.get());
     context->setFormat(fmt);
     context->create();
-    core_context.reset(dynamic_cast<GGLContext*>(CreateSharedContext().release()));
+    core_context = CreateSharedContext();
     fmt.setSwapInterval(Settings::values.vsync_enabled);
 
     child = new GGLWidgetInternal(this, shared_context.get());
@@ -437,7 +441,7 @@ void GRenderWindow::OnEmulationStopping() {
 
 void GRenderWindow::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
-
+    winId();
     // windowHandle() is not initialized until the Window is shown, so we connect it here.
     connect(windowHandle(), &QWindow::screenChanged, this, &GRenderWindow::OnFramebufferSizeChanged,
             Qt::UniqueConnection);
