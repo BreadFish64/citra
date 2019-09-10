@@ -441,6 +441,7 @@ void GRenderWindow::OnEmulationStopping() {
 
 void GRenderWindow::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
+    // forcibly give it a window handle, see if that works
     winId();
     // windowHandle() is not initialized until the Window is shown, so we connect it here.
     connect(windowHandle(), &QWindow::screenChanged, this, &GRenderWindow::OnFramebufferSizeChanged,
