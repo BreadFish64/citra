@@ -53,7 +53,7 @@ void main() {
 
 static const char fragment_shader[] = R"(
 in vec2 frag_tex_coord;
-layout(location = 0) out vec3 color;
+layout(location = 0) out vec4 color;
 
 uniform vec4 i_resolution;
 uniform vec4 o_resolution;
@@ -138,7 +138,7 @@ void RendererOpenGL::SwapBuffers() {
     // Maintain the rasterizer's state as a priority
     OpenGLState prev_state = OpenGLState::GetCurState();
     state.Apply();
-    
+
     glBindFramebuffer(GL_FRAMEBUFFER, presentation_framebuffer.handle);
 
     for (int i : {0, 1, 2}) {
@@ -236,13 +236,26 @@ void RendererOpenGL::SwapBuffers() {
         next_pbo = (current_pbo + 1) % 2;
     }
 
+    const auto& layout = render_window.GetFramebufferLayout();
+    GLuint render_texture = render_window.GetDrawTexture();
+    glBindTexture(GL_TEXTURE_2D, render_texture);
     glBindFramebuffer(GL_FRAMEBUFFER, presentation_framebuffer.handle);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, render_window.GetDrawTexture(), 0);
-    
-    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        LOG_CRITICAL(Render_OpenGL, "hol up");
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, layout.width, layout.height, 0, GL_RGB, GL_UNSIGNED_BYTE,
+                 0);
+
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, render_texture, 0);
+    GLenum DrawBuffers[1] = {GL_COLOR_ATTACHMENT0};
+    glDrawBuffers(1, DrawBuffers); // "1" is the size of DrawBuffers
+    auto val = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (val != GL_FRAMEBUFFER_COMPLETE) {
+        LOG_CRITICAL(
+            Render_OpenGL, "hol up {} {} {} {}", val == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
+            val == GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS,
+            val == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT, val == GL_FRAMEBUFFER_UNSUPPORTED);
     }
-    DrawScreens(render_window.GetFramebufferLayout());
+    DrawScreens(layout);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     m_current_frame++;
 
@@ -397,7 +410,8 @@ void RendererOpenGL::InitOpenGLObjects() {
     presentation_textures[0].Create();
     presentation_textures[1].Create();
     presentation_textures[2].Create();
-    render_window.InitRenderQueue(presentation_textures[0].handle, presentation_textures[1].handle, presentation_textures[2].handle);
+    render_window.InitRenderQueue(presentation_textures[0].handle, presentation_textures[1].handle,
+                                  presentation_textures[2].handle);
     state.texture_units[0].texture_2d = 0;
     state.Apply();
 }
@@ -679,6 +693,29 @@ void RendererOpenGL::DrawScreens(const Layout::FramebufferLayout& layout) {
     }
 }
 
+void RendererOpenGL::Present(u64 texture_handle) {
+    // TODO: obviously make this store the framebuffer for later use
+
+    const auto& layout = render_window.GetFramebufferLayout();
+    glClearColor(1.0, 0.0, 0.0, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    GLuint readFboId = 0;
+    glGenFramebuffers(1, &readFboId);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture_handle);
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_handle,
+                           0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFboId);
+    // typedef void(APIENTRYP PFNGLBLITFRAMEBUFFERPROC)(
+    //    GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1,
+    //    GLint dstY1, GLbitfield mask, GLenum filter);
+
+    glBlitFramebuffer(0, 0, layout.width, layout.height, 0, 0, layout.width, layout.height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &readFboId);
+}
+
 /// Updates the framerate
 void RendererOpenGL::UpdateFramerate() {}
 
@@ -776,7 +813,9 @@ static void APIENTRY DebugHandler(GLenum source, GLenum type, GLuint id, GLenum 
 
 /// Initialize the renderer
 Core::System::ResultStatus RendererOpenGL::Init() {
-    render_window.MakeCurrent();
+    if (!gladLoadGL()) {
+        return Core::System::ResultStatus::ErrorVideoCore_ErrorBelowGL33;
+    }
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);

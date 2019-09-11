@@ -7,9 +7,8 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <QOffScreenSurface>
 #include <QOpenGLWidget>
-#include <QOffscreenSurface>
-#include <QImage>
 #include <QThread>
 #include "common/thread.h"
 #include "core/core.h"
@@ -18,8 +17,6 @@
 class QKeyEvent;
 class QScreen;
 class QTouchEvent;
-class QSurface;
-class QOpenGLContext;
 
 class GMainWindow;
 class GRenderWindow;
@@ -27,11 +24,11 @@ class GRenderWindow;
 class GGLContext : public Frontend::GraphicsContext {
 public:
     explicit GGLContext(QOpenGLContext* shared_context);
-    
+
     void MakeCurrent() override;
-    
+
     void DoneCurrent() override;
-    
+
 private:
     std::unique_ptr<QOpenGLContext> context;
     QOffscreenSurface surface;
@@ -133,7 +130,7 @@ public:
     std::unique_ptr<Frontend::GraphicsContext> CreateSharedContext() const override;
 
     void paintGL() override;
-    
+
     void BackupGeometry();
     void RestoreGeometry();
     void restoreGeometry(const QByteArray& geometry); // overridden

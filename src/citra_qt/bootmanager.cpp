@@ -2,21 +2,22 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QOpenGLContext>
+#include <QOpenGLFunctions>
 #include <QScreen>
 #include <QWindow>
 #include <fmt/format.h>
-
 #include "citra_qt/bootmanager.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
 #include "core/3ds.h"
 #include "core/core.h"
+#include "core/frontend/scope_acquire_window_context.h"
 #include "core/settings.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
 #include "input_common/motion_emu.h"
 #include "network/network.h"
-#include "video_core/renderer_opengl/renderer_opengl.h"
+#include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
 EmuThread::EmuThread(GRenderWindow* render_window) : render_window(render_window) {}
@@ -24,9 +25,9 @@ EmuThread::EmuThread(GRenderWindow* render_window) : render_window(render_window
 EmuThread::~EmuThread() = default;
 
 void EmuThread::run() {
-    render_window->MakeCurrent();
-
     MicroProfileOnThreadCreate("EmuThread");
+
+    Frontend::ScopeAcquireWindowContext scope(*render_window);
 
     // Holds whether the cpu was running during the last iteration,
     // so that the DebugModeLeft signal can be emitted before the
@@ -249,17 +250,9 @@ void GRenderWindow::OnClientAreaResized(u32 width, u32 height) {
 }
 
 void GRenderWindow::InitRenderTarget() {
-    core_context.reset();
-
     // TODO: One of these flags might be interesting: WA_OpaquePaintEvent, WA_NoBackground,
     // WA_DontShowOnScreen, WA_DeleteOnClose
-    QSurfaceFormat fmt;
-    fmt.setVersion(3, 3);
-    fmt.setProfile(QSurfaceFormat::CoreProfile);
-    fmt.setSwapInterval(1);
-    // TODO: expose a setting for buffer value (ie default/single/double/triple)
-    fmt.setSwapBehavior(QSurfaceFormat::DefaultSwapBehavior);
-
+    core_context = CreateSharedContext();
     resize(Core::kScreenTopWidth, Core::kScreenTopHeight + Core::kScreenBottomHeight);
 
     OnMinimalClientAreaChangeRequest(GetActiveConfig().min_client_area_size);
@@ -301,8 +294,10 @@ void GRenderWindow::OnEmulationStopping() {
 }
 
 void GRenderWindow::paintGL() {
-    OpenGL::RendererOpenGL& renderer = dynamic_cast<OpenGL::RendererOpenGL&>(*VideoCore::g_renderer);
-    renderer.Present(this->GetPresentTexture());
+    // OpenGL::RendererOpenGL& renderer =
+    // dynamic_cast<OpenGL::RendererOpenGL&>(*VideoCore::g_renderer);
+    // Core::System::GetInstance().Renderer();
+    VideoCore::g_renderer->Present(this->GetPresentTexture());
 }
 
 void GRenderWindow::showEvent(QShowEvent* event) {
@@ -318,7 +313,7 @@ std::unique_ptr<Frontend::GraphicsContext> GRenderWindow::CreateSharedContext() 
 }
 
 GGLContext::GGLContext(QOpenGLContext* shared_context)
-: context{std::make_unique<QOpenGLContext>(shared_context)} {
+    : context{std::make_unique<QOpenGLContext>(shared_context)} {
     context->create();
     context->setShareContext((QOpenGLContext*)context->parent());
     surface.setFormat(shared_context->format());
@@ -332,4 +327,3 @@ void GGLContext::MakeCurrent() {
 void GGLContext::DoneCurrent() {
     context->doneCurrent();
 }
-

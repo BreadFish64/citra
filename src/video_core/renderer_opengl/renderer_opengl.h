@@ -41,14 +41,17 @@ public:
     explicit RendererOpenGL(Frontend::EmuWindow& window);
     ~RendererOpenGL() override;
 
-    /// Swap buffers (render frame)
-    void SwapBuffers() override;
-
     /// Initialize the renderer
     Core::System::ResultStatus Init() override;
 
     /// Shutdown the renderer
     void ShutDown() override;
+
+    /// Finalizes rendering the guest frame
+    void SwapBuffers() override;
+
+    /// Draws the element provided by handle to the currently bound context
+    void Present(u64 texture_handle) override;
 
     /// Prepares for video dumping (e.g. create necessary buffers, etc)
     void PrepareVideoDumping() override;
@@ -117,7 +120,7 @@ private:
     std::array<OGLBuffer, 2> frame_dumping_pbos;
     GLuint current_pbo = 1;
     GLuint next_pbo = 0;
-    
+
     // Textures used for presentation
     OGLFramebuffer presentation_framebuffer;
     std::array<OGLTexture, 3> presentation_textures{};
