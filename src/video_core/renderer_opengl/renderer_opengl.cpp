@@ -702,8 +702,15 @@ void RendererOpenGL::Present(u64 texture_handle) {
     GLuint readFboId = 0;
     glGenFramebuffers(1, &readFboId);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture_handle);
-    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_handle,
+    GLuint not_texture_handle;
+    glGenTextures(1, &not_texture_handle);
+    glBindTexture(GL_TEXTURE_2D, not_texture_handle);
+    std::vector<u8> garbage_data(layout.width * layout.height * 4);
+    std::srand(2);
+    std::generate(garbage_data.begin(), garbage_data.end(), std::rand);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, layout.width, layout.height, 0, GL_RGBA8,
+                 GL_UNSIGNED_BYTE, garbage_data.data());
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, not_texture_handle,
                            0);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, readFboId);
     // typedef void(APIENTRYP PFNGLBLITFRAMEBUFFERPROC)(
