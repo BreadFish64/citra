@@ -134,7 +134,7 @@ ResultCode CIAFile::WriteTitleMetadata() {
 
     if (auto title_key = container.GetTicket().GetTitleKey()) {
         decryption_state->content.resize(content_count);
-        for (std::size_t i = 0; i < content_count; ++i) {
+        for (u16 i = 0; i < content_count; ++i) {
             auto ctr = tmd.GetContentCTRByIndex(i);
             decryption_state->content[i].SetKeyWithIV(title_key->data(), title_key->size(),
                                                       ctr.data());
@@ -151,7 +151,7 @@ ResultVal<std::size_t> CIAFile::WriteContentData(u64 offset, std::size_t length,
     // has been written since we might get a written buffer which contains multiple .app
     // contents or only part of a larger .app's contents.
     u64 offset_max = offset + length;
-    for (int i = 0; i < container.GetTitleMetadata().GetContentCount(); i++) {
+    for (u16 i = 0; i < container.GetTitleMetadata().GetContentCount(); i++) {
         if (content_written[i] < container.GetContentSize(i)) {
             // The size, minimum unwritten offset, and maximum unwritten offset of this content
             u64 size = container.GetContentSize(i);
@@ -178,7 +178,7 @@ ResultVal<std::size_t> CIAFile::WriteContentData(u64 offset, std::size_t length,
             std::vector<u8> temp(buffer + (range_min - offset),
                                  buffer + (range_min - offset) + available_to_write);
 
-            if (tmd.GetContentTypeByIndex(static_cast<u16>(i)) &
+            if (tmd.GetContentTypeByIndex(i) &
                 FileSys::TMDContentTypeFlag::Encrypted) {
                 decryption_state->content[i].ProcessData(temp.data(), temp.data(), temp.size());
             }
