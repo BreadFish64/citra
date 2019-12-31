@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #ifdef _MSC_VER
@@ -59,3 +60,8 @@ protected:
     NonCopyable(const NonCopyable&) = delete;
     NonCopyable& operator=(const NonCopyable&) = delete;
 };
+
+
+constexpr std::size_t operator"" _sz(u64 n) {
+    return static_cast<size_t>(n);
+}
