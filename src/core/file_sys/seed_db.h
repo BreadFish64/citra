@@ -27,7 +27,7 @@ struct SeedDB {
     bool Save();
     void Add(const Seed& seed);
 
-    std::size_t GetCount() const;
+    u32 GetCount() const;
     auto FindSeedByTitleID(u64 title_id) const;
 };
 

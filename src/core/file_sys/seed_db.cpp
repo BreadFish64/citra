@@ -102,8 +102,8 @@ void SeedDB::Add(const Seed& seed) {
     seeds.push_back(seed);
 }
 
-std::size_t SeedDB::GetCount() const {
-    return seeds.size();
+u32 SeedDB::GetCount() const {
+    return static_cast<u32>(seeds.size());
 }
 
 auto SeedDB::FindSeedByTitleID(u64 title_id) const {
