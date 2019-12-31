@@ -19,7 +19,7 @@ class VideoFrame {
 public:
     std::size_t width;
     std::size_t height;
-    u32 stride;
+    std::size_t stride;
     std::vector<u8> data;
 
     VideoFrame(std::size_t width_ = 0, std::size_t height_ = 0, u8* data_ = nullptr);
