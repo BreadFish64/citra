@@ -30,8 +30,8 @@ static const int kBlockSize = 0x200; ///< Size of ExeFS blocks (in bytes)
  * @param buffer Vector to patch data into
  */
 static void ApplyIPS(std::vector<u8>& ips, std::vector<u8>& buffer) {
-    u32 cursor = 5;
-    u32 patch_length = ips.size() - 3;
+    std::size_t cursor = 5;
+    std::size_t patch_length = ips.size() - 3;
     std::string ips_header(ips.begin(), ips.begin() + 5);
 
     if (ips_header != "PATCH") {
@@ -45,18 +45,18 @@ static void ApplyIPS(std::vector<u8>& ips, std::vector<u8>& buffer) {
         if (eof_check == "EOF")
             return;
 
-        u32 offset = ips[cursor] << 16 | ips[cursor + 1] << 8 | ips[cursor + 2];
-        std::size_t length = ips[cursor + 3] << 8 | ips[cursor + 4];
+        std::size_t offset = ips[cursor] << 16 | ips[cursor + 1_sz] << 8 | ips[cursor + 2_sz];
+        std::size_t length = ips[cursor + 3] << 8 | ips[cursor + 4_sz];
 
         // check for an rle record
         if (length == 0) {
-            length = ips[cursor + 5] << 8 | ips[cursor + 6];
+            length = ips[cursor + 5_sz] << 8 | ips[cursor + 6_sz];
 
             if (buffer.size() < offset + length)
                 return;
 
-            for (u32 i = 0; i < length; ++i)
-                buffer[offset + i] = ips[cursor + 7];
+            for (std::size_t i = 0; i < length; ++i)
+                buffer[offset + i] = ips[cursor + 7_sz];
 
             cursor += 8;
 
@@ -66,7 +66,7 @@ static void ApplyIPS(std::vector<u8>& ips, std::vector<u8>& buffer) {
         if (buffer.size() < offset + length)
             return;
 
-        std::memcpy(&buffer[offset], &ips[cursor + 5], length);
+        std::memcpy(&buffer[offset], &ips[cursor + 5_sz], length);
         cursor += length + 5;
     }
 }
@@ -487,7 +487,7 @@ Loader::ResultStatus NCCHContainer::LoadSectionExeFS(const char* name, std::vect
         }
     }
 
-    // If we don't have any separate files, we'll need a full ExeFS
+    // If we don't have any separate files, we'll need a f_sz ExeFS
     if (!exefs_file.IsOpen())
         return Loader::ResultStatus::Error;
 
