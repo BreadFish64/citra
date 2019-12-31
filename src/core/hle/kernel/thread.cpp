@@ -251,14 +251,14 @@ void ThreadManager::DebugThreadQueue() {
  * slot: The index of the first free slot in the indicated page.
  * alloc_needed: Whether there's a need to allocate a new TLS page (All pages are full).
  */
-static std::tuple<std::size_t, std::size_t, bool> GetFreeThreadLocalSlot(
+static std::tuple<u32, u32, bool> GetFreeThreadLocalSlot(
     const std::vector<std::bitset<8>>& tls_slots) {
     // Iterate over all the allocated pages, and try to find one where not all slots are used.
-    for (std::size_t page = 0; page < tls_slots.size(); ++page) {
+    for (u32 page = 0; page < tls_slots.size(); ++page) {
         const auto& page_tls_slots = tls_slots[page];
         if (!page_tls_slots.all()) {
             // We found a page with at least one free slot, find which slot it is
-            for (std::size_t slot = 0; slot < page_tls_slots.size(); ++slot) {
+            for (u32 slot = 0; slot < page_tls_slots.size(); ++slot) {
                 if (!page_tls_slots.test(slot)) {
                     return std::make_tuple(page, slot, false);
                 }
@@ -347,7 +347,7 @@ ResultVal<std::shared_ptr<Thread>> KernelSystem::CreateThread(std::string name, 
         owner_process.memory_used += Memory::PAGE_SIZE;
 
         tls_slots.emplace_back(0); // The page is completely available at the start
-        available_page = tls_slots.size() - 1;
+        available_page = static_cast<u32>(tls_slots.size()) - 1;
         available_slot = 0; // Use the first slot in the new page
 
         auto& vm_manager = owner_process.vm_manager;
