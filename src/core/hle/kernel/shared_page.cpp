@@ -34,6 +34,8 @@ static std::chrono::seconds GetInitTime() {
     }
     case Settings::InitClock::FixedTime:
         return std::chrono::seconds(Settings::values.init_time);
+    default:
+        UNREACHABLE();
     }
 }
 
