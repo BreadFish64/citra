@@ -924,7 +924,7 @@ void Module::CheckAndUpdateFile(const CecDataPathType path_type, const u32 ncch_
     constexpr u32 max_num_boxes = 24;
     constexpr u32 name_size = 16;      // fixed size 16 characters long
     constexpr u32 valid_name_size = 8; // 8 characters are valid, the rest are null
-    const u32 file_size = file_buffer.size();
+    const std::size_t file_size = file_buffer.size();
 
     switch (path_type) {
     case CecDataPathType::MboxList: {
