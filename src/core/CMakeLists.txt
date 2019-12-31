@@ -1,3 +1,8 @@
+if (MSVC)
+    add_compile_options(/WX)
+    add_link_options(/WX)
+endif()
+
 add_library(core STATIC
     3ds.h
     announce_multiplayer_session.cpp
