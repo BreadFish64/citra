@@ -615,10 +615,10 @@ void Module::Interface::FindDLCContentInfos(Kernel::HLERequestContext& ctx) {
 void Module::Interface::ListDLCContentInfos(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x1003, 5, 2); // 0x10030142
 
-    u32 content_count = rp.Pop<u32>();
+    u16 content_count = static_cast<u16>(rp.Pop<u32>());
     auto media_type = static_cast<Service::FS::MediaType>(rp.Pop<u8>());
     u64 title_id = rp.Pop<u64>();
-    u32 start_index = rp.Pop<u32>();
+    u16 start_index = static_cast<u16>(rp.Pop<u32>());
     auto& content_info_out = rp.PopMappedBuffer();
 
     // Validate that only DLC TIDs are passed in
@@ -637,12 +637,12 @@ void Module::Interface::ListDLCContentInfos(Kernel::HLERequestContext& ctx) {
     u32 copied = 0;
     FileSys::TitleMetadata tmd;
     if (tmd.Load(tmd_path) == Loader::ResultStatus::Success) {
-        u32 end_index =
-            std::min(start_index + content_count, static_cast<u32>(tmd.GetContentCount()));
+        u16 end_index =
+            std::min(static_cast<u16>(start_index + content_count), static_cast<u16>(tmd.GetContentCount()));
         std::size_t write_offset = 0;
-        for (u32 i = start_index; i < end_index; i++) {
+        for (u16 i = start_index; i < end_index; i++) {
             ContentInfo content_info = {};
-            content_info.index = static_cast<u16>(i);
+            content_info.index = i;
             content_info.type = tmd.GetContentTypeByIndex(i);
             content_info.content_id = tmd.GetContentIDByIndex(i);
             content_info.size = tmd.GetContentSizeByIndex(i);
