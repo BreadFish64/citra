@@ -125,7 +125,7 @@ inline u64 cyclesToMs(s64 cycles) {
 
 namespace Core {
 
-using TimedCallback = std::function<void(u64 userdata, int cycles_late)>;
+using TimedCallback = std::function<void(u64 userdata, s64 cycles_late)>;
 
 struct TimingEventType {
     TimedCallback callback;
