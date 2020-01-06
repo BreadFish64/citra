@@ -88,21 +88,26 @@ void MemorySystem::MapPages(PageTable& page_table, u32 base, u32 size, u8* memor
                                  FlushMode::FlushAndInvalidate);
 
     u32 end = base + size;
-    while (base != end) {
-        ASSERT_MSG(base < PAGE_TABLE_NUM_ENTRIES, "out of range mapping at {:08X}", base);
+    if (memory == nullptr) {
+        std::fill(page_table.pointers.begin() + base, page_table.pointers.begin() + end, memory);
+    } else {
+        while (base != end) {
+            ASSERT_MSG(base < PAGE_TABLE_NUM_ENTRIES, "out of range mapping at {:08X}", base);
 
-        page_table.attributes[base] = type;
-        page_table.pointers[base] = memory;
+            page_table.attributes[base] = type;
+            page_table.pointers[base] = memory - (base << PAGE_BITS);
+            ASSERT_MSG(page_table.pointers[base],
+                       "memory mapping base yield a nullptr within the table");
 
-        // If the memory to map is already rasterizer-cached, mark the page
-        if (type == PageType::Memory && impl->cache_marker.IsCached(base * PAGE_SIZE)) {
-            page_table.attributes[base] = PageType::RasterizerCachedMemory;
-            page_table.pointers[base] = nullptr;
-        }
+            // If the memory to map is already rasterizer-cached, mark the page
+            if (type == PageType::Memory && impl->cache_marker.IsCached(base * PAGE_SIZE)) {
+                page_table.attributes[base] = PageType::RasterizerCachedMemory;
+                page_table.pointers[base] = nullptr;
+            }
 
-        base += 1;
-        if (memory != nullptr)
+            base += 1;
             memory += PAGE_SIZE;
+        }
     }
 }
 
@@ -171,7 +176,7 @@ T MemorySystem::Read(const VAddr vaddr) {
     if (page_pointer) {
         // NOTE: Avoid adding any extra logic to this fast-path block
         T value;
-        std::memcpy(&value, &page_pointer[vaddr & PAGE_MASK], sizeof(T));
+        std::memcpy(&value, &page_pointer[vaddr], sizeof(T));
         return value;
     }
 
@@ -205,7 +210,7 @@ void MemorySystem::Write(const VAddr vaddr, const T data) {
     u8* page_pointer = impl->current_page_table->pointers[vaddr >> PAGE_BITS];
     if (page_pointer) {
         // NOTE: Avoid adding any extra logic to this fast-path block
-        std::memcpy(&page_pointer[vaddr & PAGE_MASK], &data, sizeof(T));
+        std::memcpy(&page_pointer[vaddr], &data, sizeof(T));
         return;
     }
 
@@ -259,7 +264,7 @@ bool MemorySystem::IsValidPhysicalAddress(const PAddr paddr) {
 u8* MemorySystem::GetPointer(const VAddr vaddr) {
     u8* page_pointer = impl->current_page_table->pointers[vaddr >> PAGE_BITS];
     if (page_pointer) {
-        return page_pointer + (vaddr & PAGE_MASK);
+        return page_pointer + vaddr;
     }
 
     if (impl->current_page_table->attributes[vaddr >> PAGE_BITS] ==
@@ -390,7 +395,7 @@ void MemorySystem::RasterizerMarkRegionCached(PAddr start, u32 size, bool cached
                     case PageType::RasterizerCachedMemory: {
                         page_type = PageType::Memory;
                         page_table->pointers[vaddr >> PAGE_BITS] =
-                            GetPointerForRasterizerCache(vaddr & ~PAGE_MASK);
+                            GetPointerForRasterizerCache(vaddr & ~PAGE_MASK) - (vaddr & ~PAGE_MASK);
                         break;
                     }
                     default:
@@ -506,7 +511,8 @@ void MemorySystem::ReadBlock(const Kernel::Process& process, const VAddr src_add
         case PageType::Memory: {
             DEBUG_ASSERT(page_table.pointers[page_index]);
 
-            const u8* src_ptr = page_table.pointers[page_index] + page_offset;
+            const u8* src_ptr =
+                page_table.pointers[page_index] + page_offset + (page_index << PAGE_BITS);
             std::memcpy(dest_buffer, src_ptr, copy_amount);
             break;
         }
@@ -570,7 +576,8 @@ void MemorySystem::WriteBlock(const Kernel::Process& process, const VAddr dest_a
         case PageType::Memory: {
             DEBUG_ASSERT(page_table.pointers[page_index]);
 
-            u8* dest_ptr = page_table.pointers[page_index] + page_offset;
+            u8* dest_ptr =
+                page_table.pointers[page_index] + page_offset + (page_index << PAGE_BITS);
             std::memcpy(dest_ptr, src_buffer, copy_amount);
             break;
         }
@@ -620,7 +627,8 @@ void MemorySystem::ZeroBlock(const Kernel::Process& process, const VAddr dest_ad
         case PageType::Memory: {
             DEBUG_ASSERT(page_table.pointers[page_index]);
 
-            u8* dest_ptr = page_table.pointers[page_index] + page_offset;
+            u8* dest_ptr =
+                page_table.pointers[page_index] + page_offset + (page_index << PAGE_BITS);
             std::memset(dest_ptr, 0, copy_amount);
             break;
         }
@@ -673,7 +681,8 @@ void MemorySystem::CopyBlock(const Kernel::Process& dest_process,
         }
         case PageType::Memory: {
             DEBUG_ASSERT(page_table.pointers[page_index]);
-            const u8* src_ptr = page_table.pointers[page_index] + page_offset;
+            const u8* src_ptr =
+                page_table.pointers[page_index] + page_offset + (page_index << PAGE_BITS);
             WriteBlock(dest_process, dest_addr, src_ptr, copy_amount);
             break;
         }
