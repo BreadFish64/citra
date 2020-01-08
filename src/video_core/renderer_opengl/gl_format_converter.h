@@ -1,8 +1,10 @@
-// Copyright 2019 Citra Emulator Project
+﻿// Copyright 2019 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
 #pragma once
+
+#include <array>
 #include <glad/glad.h>
 #include "common/common_types.h"
 #include "common/math_util.h"
@@ -40,6 +42,12 @@ enum class PixelFormat {
 
 class FormatConverterBase;
 
+enum class AvailableConverters : std::size_t {
+    ReadPixel_D24S8_ABGR8,
+    Count,
+    Unavailable,
+};
+
 class FormatConverterOpenGL : NonCopyable {
 public:
     FormatConverterOpenGL();
@@ -52,8 +60,9 @@ public:
                  const Common::Rectangle<u32>& dst_rect, GLuint draw_fb_handle);
 
 private:
-    using FromToFormatPair = std::pair<PixelFormat, PixelFormat>;
-    std::map<FromToFormatPair, std::shared_ptr<FormatConverterBase>> converters;
+    std::array<std::unique_ptr<FormatConverterBase>,
+               static_cast<std::size_t>(AvailableConverters::Count)>
+        converters{};
 };
 
 } // namespace OpenGL

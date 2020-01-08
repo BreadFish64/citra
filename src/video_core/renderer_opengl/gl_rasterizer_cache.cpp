@@ -1,4 +1,4 @@
-// Copyright 2015 Citra Emulator Project
+﻿// Copyright 2015 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
@@ -1826,9 +1826,9 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
             break;
 
         const auto interval = *it & validate_interval;
+
         // Look for a valid surface to copy from
         SurfaceParams params = surface->FromInterval(interval);
-
         Surface copy_surface =
             FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
         if (copy_surface != nullptr) {
@@ -1880,17 +1880,20 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
             PixelFormat::I8,
             PixelFormat::A8,
             PixelFormat::IA4,
-            /*PixelFormat::I4,*/ /*PixelFormat::A4,*/
-            /*PixelFormat::ETC1,*/ PixelFormat::ETC1A4,
+            // PixelFormat::I4,
+            // PixelFormat::A4,
+            // PixelFormat::ETC1,
+            PixelFormat::ETC1A4,
             PixelFormat::D16,
             PixelFormat::D24,
-            PixelFormat::D24S8};
+            PixelFormat::D24S8,
+        };
         for (PixelFormat format : all_formats) {
             params.pixel_format = format;
             Surface test_surface =
                 FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
             if (test_surface != nullptr) {
-                LOG_ERROR(Render_OpenGL, "Missing converter: {} -> {}", PixelFormatAsString(format),
+                LOG_DEBUG(Render_OpenGL, "Missing converter: {} -> {}", PixelFormatAsString(format),
                           PixelFormatAsString(surface->pixel_format));
             }
         }
