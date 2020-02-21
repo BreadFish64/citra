@@ -161,7 +161,7 @@ struct SurfaceParams {
 
     static constexpr unsigned int GetFormatBpp(PixelFormat format) {
         const auto format_idx = static_cast<std::size_t>(format);
-        DEBUG_ASSERT_MSG(format_idx < bpp_table.size(), "Invalid pixel format {}", format_idx);
+        DEBUG_ASSERT_MSG(format_idx < BPP_TABLE.size(), "Invalid pixel format {}", format_idx);
         return BPP_TABLE[format_idx];
     }
 
