@@ -20,6 +20,7 @@
 #endif
 #include <unordered_map>
 #include <boost/functional/hash.hpp>
+#include <boost/pool/pool_alloc.hpp>
 #include <glad/glad.h>
 #include "common/assert.h"
 #include "common/common_funcs.h"
@@ -83,6 +84,11 @@ using SurfaceSet = std::set<Surface>;
 using SurfaceRegions = boost::icl::interval_set<PAddr>;
 using SurfaceMap = boost::icl::interval_map<PAddr, Surface>;
 using SurfaceCache = boost::icl::interval_map<PAddr, SurfaceSet>;
+
+using LRUSurfaceLookup =
+    std::list<CachedSurface*,
+              boost::fast_pool_allocator<CachedSurface*, boost::default_user_allocator_new_delete,
+                                         boost::details::pool::null_mutex>>;
 
 using SurfaceInterval = SurfaceCache::interval_type;
 static_assert(std::is_same<SurfaceRegions::interval_type, SurfaceCache::interval_type>() &&
@@ -341,6 +347,10 @@ private:
 };
 
 struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface> {
+    ~CachedSurface() {
+        RemoveFromLRU();
+    }
+
     bool CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const;
     bool CanCopy(const SurfaceParams& dest_surface, SurfaceInterval copy_interval) const;
 
@@ -420,7 +430,29 @@ struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface
         watchers.clear();
     }
 
+    void AddToLRU(LRUSurfaceLookup& new_lru) {
+        lru = &new_lru;
+        lru->emplace_front(this);
+        lru_pos = lru->begin();
+    }
+
+    void LRUBump() {
+        lru->erase(lru_pos);
+        lru->emplace_front(this);
+        lru_pos = lru->begin();
+    }
+
+    void RemoveFromLRU() {
+        if (!lru)
+            return;
+        lru->erase(lru_pos);
+        lru_pos = {};
+        lru = nullptr;
+    }
+
 private:
+    LRUSurfaceLookup* lru;
+    LRUSurfaceLookup::iterator lru_pos;
     std::list<std::weak_ptr<SurfaceWatcher>> watchers;
 };
 
@@ -505,6 +537,8 @@ private:
     void UpdatePagesCachedCount(PAddr addr, u32 size, int delta);
 
     SurfaceCache surface_cache;
+    std::size_t lru_max_size;
+    LRUSurfaceLookup lru;
     PageMap cached_pages;
     SurfaceMap dirty_regions;
     SurfaceSet remove_surfaces;
