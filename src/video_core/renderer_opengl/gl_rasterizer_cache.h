@@ -9,18 +9,18 @@
 #include <memory>
 #include <set>
 #include <tuple>
+#include <unordered_map>
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 #endif
+#include <boost/functional/hash.hpp>
 #include <boost/icl/interval_map.hpp>
 #include <boost/icl/interval_set.hpp>
+#include <boost/pool/pool_alloc.hpp>
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
-#include <unordered_map>
-#include <boost/functional/hash.hpp>
-#include <boost/pool/pool_alloc.hpp>
 #include <glad/glad.h>
 #include "common/assert.h"
 #include "common/common_funcs.h"
