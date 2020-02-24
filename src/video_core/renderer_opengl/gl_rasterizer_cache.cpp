@@ -2051,8 +2051,10 @@ void RasterizerCacheOpenGL::RegisterSurface(const Surface& surface) {
     surface->registered = true;
     surface_cache.add({surface->GetInterval(), SurfaceSet{surface}});
 
-    if (lru.size() == lru_max_size)
+    if (lru.size() == lru_max_size) {
+        LOG_DEBUG(Render_OpenGL, "Surface evicted from cache");
         UnregisterSurface(lru.back()->shared_from_this());
+    }
     surface->AddToLRU(lru);
 
     UpdatePagesCachedCount(surface->addr, surface->size, 1);
