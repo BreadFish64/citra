@@ -36,6 +36,7 @@ jobs:
 - job: build_macos
   displayName: 'build-macos'
   variables:
+    BuildSuffix: 'macos'
     ScriptFolder: 'macos'
   pool:
     vmImage: macos-latest

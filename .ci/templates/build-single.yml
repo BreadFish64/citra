@@ -6,12 +6,12 @@ parameters:
 
 steps:
 - ${{ if eq(parameters.cache, 'true') }}:
-  - task: CacheBeta@0
-    displayName: 'Cache Build System'
+  - task: Cache@2
     inputs:
-      key: citra-v1-$(BuildName)-$(BuildSuffix)-$(CacheSuffix)
-      path: $(System.DefaultWorkingDirectory)/ccache
-      cacheHitVar: CACHE_RESTORED
+      key: citra | $(BuildName) | $(BuildSuffix) | $(Build.SourceVersion)
+      path: '$(System.DefaultWorkingDirectory)/ccache'
+      cacheHitVar: 'CACHE_RESTORED'
+      restoreKeys: citra | $(BuildName) | $(BuildSuffix)
 - bash: ./.ci/scripts/$(ScriptFolder)/docker.sh
   displayName: 'Build'
   env:

@@ -4,4 +4,4 @@ steps:
 - ${{ if ne(parameters.artifactSource, 'true') }}:
   - template: ./retrieve-master-source.yml
     parameters:
-      needSubmodules: ${{ parameters.needSubmodules }}
+      needSubmodules: $(parameters.needSubmodules)

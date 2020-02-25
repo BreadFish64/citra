@@ -1,5 +1,5 @@
 parameters:
-  artifactSource: 'true'
+  artifactSource: 'false'
 
 steps:
 # Temporary fix for lacking dependency
@@ -7,7 +7,7 @@ steps:
 #   displayName: 'Install missing dependencies'
 - template: ./sync-source.yml
   parameters:
-    artifactSource: ${{ parameters.artifactSource }}
+    artifactSource: $(parameters.artifactSource)
     needSubmodules: 'false'
 - script: ./.ci/scripts/format/exec.sh
   displayName: 'Verify Formatting'

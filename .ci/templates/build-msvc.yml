@@ -9,7 +9,7 @@ steps:
 - task: MSBuild@1
   displayName: 'Build'
   inputs:
-    solution: 'build/yuzu.sln'
+    solution: 'build/citra.sln'
     maximumCpuCount: true
     configuration: release
 - task: PowerShell@2

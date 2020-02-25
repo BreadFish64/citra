@@ -1,8 +1,8 @@
 #!/bin/bash -ex
 
-cd /citra
+ccache -s
 
-mkdir build && cd build
+mkdir -p build && cd build
 cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/lib/ccache/gcc -DCMAKE_CXX_COMPILER=/usr/lib/ccache/g++
 ninja
 
