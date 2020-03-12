@@ -50,6 +50,13 @@ add_library(video_core STATIC
     renderer_opengl/post_processing_opengl.h
     renderer_opengl/renderer_opengl.cpp
     renderer_opengl/renderer_opengl.h
+    renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.cpp
+    renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h
+    renderer_opengl/texture_filters/anime4k/refine.frag
+    renderer_opengl/texture_filters/anime4k/refine.vert
+    renderer_opengl/texture_filters/anime4k/x_gradient.frag
+    renderer_opengl/texture_filters/anime4k/y_gradient.frag
+    renderer_opengl/texture_filters/anime4k/y_gradient.vert
     renderer_opengl/texture_filters/tex_coord.vert
     renderer_opengl/texture_filters/texture_filter_interface.h
     renderer_opengl/texture_filters/texture_filter_manager.cpp
