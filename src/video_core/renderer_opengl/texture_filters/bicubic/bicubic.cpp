@@ -29,7 +29,7 @@ Bicubic::Bicubic(u16 scale_factor) : TextureFilterInterface(scale_factor) {
 }
 
 void Bicubic::scale(CachedSurface& surface, const Common::Rectangle<u32>& rect,
-                          std::size_t buffer_offset) {
+                    std::size_t buffer_offset) {
     const OpenGLState cur_state = OpenGLState::GetCurState();
 
     OGLTexture src_tex;

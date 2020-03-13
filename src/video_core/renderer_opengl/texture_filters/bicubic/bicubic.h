@@ -9,7 +9,7 @@
 #include "video_core/renderer_opengl/texture_filters/texture_filter_interface.h"
 
 namespace OpenGL {
-    class Bicubic : public TextureFilterInterface {
+class Bicubic : public TextureFilterInterface {
 public:
     static TextureFilterInfo GetInfo() {
         TextureFilterInfo info;
@@ -29,4 +29,4 @@ private:
     OGLFramebuffer draw_fbo{};
     OGLSampler src_sampler{};
 };
-}
+} // namespace OpenGL
