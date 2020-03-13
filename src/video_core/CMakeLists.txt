@@ -57,6 +57,9 @@ add_library(video_core STATIC
     renderer_opengl/texture_filters/anime4k/x_gradient.frag
     renderer_opengl/texture_filters/anime4k/y_gradient.frag
     renderer_opengl/texture_filters/anime4k/y_gradient.vert
+    renderer_opengl/texture_filters/bicubic/bicubic.cpp
+    renderer_opengl/texture_filters/bicubic/bicubic.frag
+    renderer_opengl/texture_filters/bicubic/bicubic.h
     renderer_opengl/texture_filters/tex_coord.vert
     renderer_opengl/texture_filters/texture_filter_interface.h
     renderer_opengl/texture_filters/texture_filter_manager.cpp

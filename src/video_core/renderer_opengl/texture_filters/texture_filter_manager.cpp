@@ -5,6 +5,7 @@
 #include "common/logging/log.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h"
+#include "video_core/renderer_opengl/texture_filters/bicubic/bicubic.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filter_manager.h"
 #include "video_core/renderer_opengl/texture_filters/xbrz/xbrz_freescale.h"
 
@@ -41,6 +42,7 @@ TextureFilterManager::TextureFilterMap() {
     static const std::map<std::string_view, TextureFilterInfo, FilterNameComp> filter_map{
         FilterMapPair<NoFilter>(),
         FilterMapPair<Anime4kUltrafast>(),
+        FilterMapPair<Bicubic>(),
         FilterMapPair<XbrzFreescale>(),
     };
     return filter_map;
