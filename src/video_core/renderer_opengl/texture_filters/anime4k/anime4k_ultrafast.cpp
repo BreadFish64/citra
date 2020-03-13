@@ -44,20 +44,21 @@ namespace OpenGL {
 
 Anime4kUltrafast::Anime4kUltrafast(u16 scale_factor) : TextureFilterInterface(scale_factor) {
     const OpenGLState cur_state = OpenGLState::GetCurState();
-    const auto setup_temp_tex = [this, scale_factor](TempTex& texture, GLint format) {
+    const auto setup_temp_tex = [this, scale_factor](TempTex& texture, GLint internal_format,
+                                                     GLint format) {
         texture.fbo.Create();
         texture.tex.Create();
         state.draw.draw_framebuffer = texture.fbo.handle;
         state.Apply();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_RECTANGLE, texture.tex.handle);
-        glTexImage2D(GL_TEXTURE_RECTANGLE, 1, format, 1024 * scale_factor, 1024 * scale_factor, 0,
-                     format, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_RECTANGLE, 0, internal_format, 1024 * scale_factor,
+                     1024 * scale_factor, 0, format, GL_HALF_FLOAT, nullptr);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_RECTANGLE,
                                texture.tex.handle, 0);
     };
-    setup_temp_tex(LUMAD, GL_R16F);
-    setup_temp_tex(XY, GL_RG16F);
+    setup_temp_tex(LUMAD, GL_R16F, GL_RED);
+    setup_temp_tex(XY, GL_RG16F, GL_RG);
 
     vao.Create();
     out_fbo.Create();
