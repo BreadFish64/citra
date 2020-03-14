@@ -1,10 +1,4 @@
 //? #version 330
-#pragma once
-#ifndef SHADER
-#define SHADER(name, src) src
-#endif
-
-SHADER(refine_vert,
 out vec2 tex_coord;
 out vec2 input_max;
 
@@ -18,4 +12,3 @@ void main() {
     tex_coord = (vertices[gl_VertexID] + 1.0) / 2.0;
     input_max = textureSize(HOOKED, 0) * 2.0 - 1.0;
 }
-)

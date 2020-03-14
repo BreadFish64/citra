@@ -5,13 +5,13 @@
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/texture_filters/bicubic/bicubic.h"
 
-#include "video_core/renderer_opengl/texture_filters/bicubic/bicubic.frag"
-#include "video_core/renderer_opengl/texture_filters/tex_coord.vert"
+#include "shaders/bicubic.frag"
+#include "shaders/tex_coord.vert"
 
 namespace OpenGL {
 
 Bicubic::Bicubic(u16 scale_factor) : TextureFilterInterface(scale_factor) {
-    program.Create(tex_coord_vert, bicubic_frag);
+    program.Create(tex_coord_vert.data(), bicubic_frag.data());
     vao.Create();
     draw_fbo.Create();
     src_sampler.Create();

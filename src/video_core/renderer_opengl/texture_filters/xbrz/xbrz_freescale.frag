@@ -1,10 +1,4 @@
 //? #version 330
-#pragma once
-#ifndef SHADER
-#define SHADER(name, src) src
-#endif
-
-SHADER(xbrz_freescale_frag,
 in vec2 tex_coord;
 in vec2 source_size;
 in vec2 output_size;
@@ -248,4 +242,3 @@ void main() {
     }
     frag_color = res;
 }
-)

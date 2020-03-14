@@ -36,8 +36,3 @@ struct TextureFilterInfo {
 };
 
 } // namespace OpenGL
-
-#define SHADER(name, src)                                                                          \
-    namespace OpenGL {                                                                             \
-    constexpr char name[] = #src;                                                                  \
-    }

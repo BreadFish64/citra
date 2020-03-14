@@ -43,15 +43,15 @@
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/texture_filters/xbrz/xbrz_freescale.h"
 
-#include "video_core/renderer_opengl/texture_filters/xbrz/xbrz_freescale.frag"
-#include "video_core/renderer_opengl/texture_filters/xbrz/xbrz_freescale.vert"
+#include "shaders/xbrz_freescale.frag"
+#include "shaders/xbrz_freescale.vert"
 
 namespace OpenGL {
 
 XbrzFreescale::XbrzFreescale(u16 scale_factor) : TextureFilterInterface(scale_factor) {
     const OpenGLState cur_state = OpenGLState::GetCurState();
 
-    program.Create(xbrz_freescale_vert, xbrz_freescale_frag);
+    program.Create(xbrz_freescale_vert.data(), xbrz_freescale_frag.data());
     vao.Create();
     draw_fbo.Create();
     src_sampler.Create();

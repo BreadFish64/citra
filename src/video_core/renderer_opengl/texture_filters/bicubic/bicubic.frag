@@ -1,10 +1,4 @@
 //? #version 330
-#pragma once
-#ifndef SHADER
-#define SHADER(name, src) src
-#endif
-
-SHADER(bicubic_frag,
 in vec2 tex_coord;
 
 out vec4 frag_color;
@@ -56,4 +50,3 @@ vec4 textureBicubic(sampler2D sampler, vec2 texCoords) {
 void main() {
     frag_color = textureBicubic(input_texture, tex_coord);
 }
-)

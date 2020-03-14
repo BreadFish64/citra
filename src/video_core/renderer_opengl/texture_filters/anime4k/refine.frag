@@ -1,10 +1,4 @@
 //? #version 330
-#pragma once
-#ifndef SHADER
-#define SHADER(name, src) src
-#endif
-
-SHADER(refine_frag,
 in vec2 tex_coord;
 in vec2 input_max;
 
@@ -124,4 +118,3 @@ vec4 Compute() {
 void main() {
     frag_color = Compute();
 }
-)

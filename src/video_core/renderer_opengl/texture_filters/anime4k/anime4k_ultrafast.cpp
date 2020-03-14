@@ -33,12 +33,12 @@
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h"
 
-#include "video_core/renderer_opengl/texture_filters/anime4k/refine.frag"
-#include "video_core/renderer_opengl/texture_filters/anime4k/refine.vert"
-#include "video_core/renderer_opengl/texture_filters/anime4k/x_gradient.frag"
-#include "video_core/renderer_opengl/texture_filters/anime4k/y_gradient.frag"
-#include "video_core/renderer_opengl/texture_filters/anime4k/y_gradient.vert"
-#include "video_core/renderer_opengl/texture_filters/tex_coord.vert"
+#include "shaders/refine.frag"
+#include "shaders/refine.vert"
+#include "shaders/tex_coord.vert"
+#include "shaders/x_gradient.frag"
+#include "shaders/y_gradient.frag"
+#include "shaders/y_gradient.vert"
 
 namespace OpenGL {
 
@@ -75,9 +75,9 @@ Anime4kUltrafast::Anime4kUltrafast(u16 scale_factor) : TextureFilterInterface(sc
     }
     state.draw.vertex_array = vao.handle;
 
-    gradient_x_program.Create(tex_coord_vert, x_gradient_frag);
-    gradient_y_program.Create(y_gradient_vert, y_gradient_frag);
-    refine_program.Create(refine_vert, refine_frag);
+    gradient_x_program.Create(tex_coord_vert.data(), x_gradient_frag.data());
+    gradient_y_program.Create(y_gradient_vert.data(), y_gradient_frag.data());
+    refine_program.Create(refine_vert.data(), refine_frag.data());
 
     state.draw.shader_program = gradient_y_program.handle;
     state.Apply();

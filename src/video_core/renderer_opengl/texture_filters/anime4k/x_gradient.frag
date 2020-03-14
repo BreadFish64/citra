@@ -1,10 +1,4 @@
 //? #version 330
-#pragma once
-#ifndef SHADER
-#define SHADER(name, src) src
-#endif
-
-SHADER(x_gradient_frag,
 in vec2 tex_coord;
 
 out vec2 frag_color;
@@ -25,4 +19,3 @@ void main() {
 
     frag_color = vec2(r - l, l + 2.0 * c + r);
 }
-)

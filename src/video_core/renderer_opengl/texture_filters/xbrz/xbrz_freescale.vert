@@ -1,10 +1,4 @@
 //? #version 330
-#pragma once
-#ifndef SHADER
-#define SHADER(name, src) src
-#endif
-
-SHADER(xbrz_freescale_vert,
 out vec2 tex_coord;
 out vec2 source_size;
 out vec2 output_size;
@@ -21,4 +15,3 @@ void main() {
     source_size = textureSize(tex, 0);
     output_size = source_size * scale;
 }
-)

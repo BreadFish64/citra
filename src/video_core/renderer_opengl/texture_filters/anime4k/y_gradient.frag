@@ -1,10 +1,4 @@
 //? #version 330
-#pragma once
-#ifndef SHADER
-#define SHADER(name, src) src
-#endif
-
-SHADER(y_gradient_frag,
 in vec2 input_max;
 
 out float frag_color;
@@ -20,4 +14,3 @@ void main() {
 
     frag_color = 1 - length(grad);
 }
-)
