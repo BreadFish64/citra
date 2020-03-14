@@ -45,9 +45,7 @@ float GetLeftRatio(vec2 center, vec2 origin, vec2 direction) {
 vec2 pos = fract(tex_coord * source_size) - vec2(0.5, 0.5);
 vec2 coord = tex_coord - pos / source_size;
 
-vec4 P(int x, int y) {
-    return textureOffset(tex, coord, ivec2(x, y));
-}
+#define P(x, y) textureOffset(tex, coord, ivec2(x, y))
 
 void main() {
     //---------------------------------------

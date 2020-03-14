@@ -22,12 +22,9 @@ vec4 getAverage(vec4 cc, vec4 a, vec4 b, vec4 c) {
     return cc * (1 - STRENGTH) + ((a + b + c) / 3) * STRENGTH;
 }
 
-RGBAL GetRGBAL(ivec2 offset) {
-    RGBAL texel;
-    texel.c = textureOffset(HOOKED, tex_coord, offset);
-    texel.l = texture(LUMAD, clamp(gl_FragCoord.xy + offset, vec2(0.0), input_max)).x;
-    return texel;
-}
+#define GetRGBAL(offset)                                                                           \
+    RGBAL(textureOffset(HOOKED, tex_coord, offset),                                                \
+          texture(LUMAD, clamp(gl_FragCoord.xy + offset, vec2(0.0), input_max)).x)
 
 float min3v(float a, float b, float c) {
     return min(min(a, b), c);

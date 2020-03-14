@@ -5,12 +5,9 @@ out vec2 frag_color;
 
 uniform sampler2D tex_input;
 
-float GetLum(int xoffset) {
-    const vec3 K = vec3(0.2627, 0.6780, 0.0593);
-    vec4 color = textureOffset(tex_input, tex_coord, ivec2(xoffset, 0));
-    // TODO: improve handling of alpha channel
-    return dot(color.rgb, K);
-}
+const vec3 K = vec3(0.2627, 0.6780, 0.0593);
+// TODO: improve handling of alpha channel
+#define GetLum(xoffset) dot(K, textureOffset(tex_input, tex_coord, ivec2(xoffset, 0)).rgb)
 
 void main() {
     float l = GetLum(-1);
