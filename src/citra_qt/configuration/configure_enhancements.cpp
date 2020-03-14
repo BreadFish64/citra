@@ -17,7 +17,7 @@ ConfigureEnhancements::ConfigureEnhancements(QWidget* parent)
     for (const auto& filter : OpenGL::TextureFilterManager::TextureFilterMap())
         ui->texture_filter_combobox->addItem(QString::fromStdString(filter.first.data()));
 
-    connect(ui->texture_filter_combobox, &QComboBox::currentTextChanged, this,
+    connect(ui->texture_filter_combobox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &ConfigureEnhancements::updateTextureFilter);
 
     SetConfiguration();
@@ -64,11 +64,11 @@ void ConfigureEnhancements::SetConfiguration() {
     int tex_filter_idx = ui->texture_filter_combobox->findText(
         QString::fromStdString(Settings::values.texture_filter_name));
     if (tex_filter_idx == -1) {
-        ui->texture_filter_combobox->setCurrentText(
-            QString::fromStdString(OpenGL::TextureFilterManager::NONE.data()));
+        ui->texture_filter_combobox->setCurrentIndex(0);
     } else {
         ui->texture_filter_combobox->setCurrentIndex(tex_filter_idx);
     }
+    updateTextureFilter(tex_filter_idx);
     ui->layout_combobox->setCurrentIndex(static_cast<int>(Settings::values.layout_option));
     ui->swap_screen->setChecked(Settings::values.swap_screen);
     ui->toggle_disk_shader_cache->setChecked(Settings::values.use_hw_shader &&
@@ -105,10 +105,13 @@ void ConfigureEnhancements::updateShaders(Settings::StereoRenderOption stereo_op
     }
 }
 
-void ConfigureEnhancements::updateTextureFilter(const QString& name) {
-    std::string std_name = name.toStdString();
-    ui->texture_filter_group->setEnabled(std_name != OpenGL::TextureFilterManager::NONE);
-    const auto& clamp = OpenGL::TextureFilterManager::TextureFilterMap().at(std_name).clamp_scale;
+void ConfigureEnhancements::updateTextureFilter(int index) {
+    if (index == -1)
+        return;
+    ui->texture_filter_group->setEnabled(index != 0);
+    const auto& clamp = OpenGL::TextureFilterManager::TextureFilterMap()
+                            .at(ui->texture_filter_combobox->currentText().toStdString())
+                            .clamp_scale;
     ui->texture_scale_spinbox->setMinimum(clamp.min);
     ui->texture_scale_spinbox->setMaximum(clamp.max);
 }

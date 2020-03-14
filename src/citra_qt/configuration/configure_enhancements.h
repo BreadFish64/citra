@@ -27,7 +27,7 @@ public:
 
 private:
     void updateShaders(Settings::StereoRenderOption stereo_option);
-    void updateTextureFilter(const QString&);
+    void updateTextureFilter(int index);
 
     Ui::ConfigureEnhancements* ui;
     QColor bg_color;
