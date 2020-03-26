@@ -495,5 +495,5 @@ struct FormatTuple {
 
 constexpr FormatTuple tex_tuple = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
 
-const FormatTuple& GetFormatTuple(SurfaceParams::PixelFormat pixel_format);
+const FormatTuple& GetFormatTuple(PixelFormat pixel_format);
 } // namespace OpenGL

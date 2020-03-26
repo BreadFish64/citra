@@ -1,4 +1,4 @@
-﻿// Copyright 2015 Citra Emulator Project
+// Copyright 2015 Citra Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
@@ -1839,9 +1839,10 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         }
 
         // Try to find surface in cache with different format
-        auto formats = format_converter.GetPossibleConversions(surface->pixel_format);
+        auto converters = format_converter.GetPossibleConversions(surface->pixel_format);
         bool retry = false;
-        for (PixelFormat format : formats) {
+        for (auto& converter : converters) {
+            PixelFormat format = converter.first.src_format;
             params.pixel_format = format;
             Surface reinterpret_surface =
                 FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
@@ -1853,8 +1854,8 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
                 auto src_rect = reinterpret_surface->GetScaledSubRect(convert_params);
                 auto dest_rect = surface->GetScaledSubRect(convert_params);
 
-                format_converter.Convert(format, reinterpret_surface->texture.handle, src_rect,
-                                         read_framebuffer.handle, surface->pixel_format,
+                converter.second->Convert(reinterpret_surface->texture.handle, src_rect,
+                                         read_framebuffer.handle,
                                          surface->texture.handle, dest_rect,
                                          draw_framebuffer.handle);
 
@@ -1867,9 +1868,11 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
             continue;
         }
 
+        // This check is too expensive to be acceptable in release builds
+        #ifdef _DEBUG
         // Could not find a matching converter, check if we need to implement a converter
         // Skip I4, A4, and ETC1 because GetFormatBpp < 8 which will result in a crash
-        static const std::array<PixelFormat, 14> all_formats{
+        static constexpr std::array<PixelFormat, 14> all_formats{
             PixelFormat::RGBA8,
             PixelFormat::RGB8,
             PixelFormat::RGB5A1,
@@ -1893,10 +1896,11 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
             Surface test_surface =
                 FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
             if (test_surface != nullptr) {
-                LOG_DEBUG(Render_OpenGL, "Missing converter: {} -> {}", PixelFormatAsString(format),
+                LOG_ERROR(Render_OpenGL, "Missing converter: {} -> {}", PixelFormatAsString(format),
                           PixelFormatAsString(surface->pixel_format));
             }
         }
+        #endif
 
         // Load data from 3DS memory
         FlushRegion(params.addr, params.size);

@@ -12,22 +12,6 @@
 
 namespace OpenGL {
 
-constexpr std::size_t FormatToIndex(const PixelFormat& src, const PixelFormat& dst) {
-    AvailableConverters f(AvailableConverters::Unavailable);
-    if (src == PixelFormat::D24S8 && dst == PixelFormat::RGBA8) {
-        f = AvailableConverters::ReadPixel_D24S8_ABGR8;
-    }
-    return static_cast<std::size_t>(f);
-}
-
-class FormatConverterBase {
-public:
-    virtual ~FormatConverterBase() = default;
-    virtual void Convert(GLuint src_tex, const Common::Rectangle<u32>& src_rect,
-                         GLuint read_fb_handle, GLuint dst_tex,
-                         const Common::Rectangle<u32>& dst_rect, GLuint draw_fb_handle) = 0;
-};
-
 class ConverterD24S8toABGR final : public FormatConverterBase {
 public:
     ConverterD24S8toABGR() {
@@ -149,35 +133,16 @@ private:
 };
 
 FormatConverterOpenGL::FormatConverterOpenGL() {
-    converters[static_cast<std::size_t>(AvailableConverters::ReadPixel_D24S8_ABGR8)] =
-        std::make_unique<ConverterD24S8toABGR>();
+    converters.emplace(PixelFormatPair{PixelFormat::RGBA8, PixelFormat::D24S8},
+                       std::make_unique<ConverterD24S8toABGR>());
 }
 
 FormatConverterOpenGL::~FormatConverterOpenGL() = default;
 
-static const std::map<PixelFormat, std::vector<PixelFormat>> possible_conversions{
-    {PixelFormat::RGBA8, {PixelFormat::D24S8}}};
-
-std::vector<PixelFormat> FormatConverterOpenGL::GetPossibleConversions(
-    PixelFormat dst_format) const {
-    auto itr = possible_conversions.find(dst_format);
-    if (itr != possible_conversions.end()) {
-        return itr->second;
-    }
-    return std::vector<PixelFormat>();
-}
-
-bool FormatConverterOpenGL::Convert(PixelFormat src_format, GLuint src_tex,
-                                    const Common::Rectangle<u32>& src_rect, GLuint read_fb_handle,
-                                    PixelFormat dst_format, GLuint dst_tex,
-                                    const Common::Rectangle<u32>& dst_rect, GLuint draw_fb_handle) {
-    auto index = FormatToIndex(src_format, dst_format);
-    if (static_cast<AvailableConverters>(index) == AvailableConverters::Unavailable) {
-        return false;
-    }
-    auto& converter = converters[index];
-    converter->Convert(src_tex, src_rect, read_fb_handle, dst_tex, dst_rect, draw_fb_handle);
-    return true;
+boost::iterator_range<FormatConverterOpenGL::ConverterMap::iterator>
+FormatConverterOpenGL::GetPossibleConversions(PixelFormat dst_format) {
+    auto [begin, end] = converters.equal_range(dst_format);
+    return boost::make_iterator_range(begin, end);
 }
 
 } // namespace OpenGL
