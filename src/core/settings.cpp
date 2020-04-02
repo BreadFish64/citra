@@ -85,7 +85,6 @@ void LogSettings() {
     LogSetting("Renderer_FrameLimit", Settings::values.frame_limit);
     LogSetting("Renderer_PostProcessingShader", Settings::values.pp_shader_name);
     LogSetting("Renderer_FilterMode", Settings::values.filter_mode);
-    LogSetting("Renderer_TextureFilterFactor", Settings::values.texture_filter_factor);
     LogSetting("Renderer_TextureFilterName", Settings::values.texture_filter_name);
     LogSetting("Stereoscopy_Render3d", static_cast<int>(Settings::values.render_3d));
     LogSetting("Stereoscopy_Factor3d", Settings::values.factor_3d);
