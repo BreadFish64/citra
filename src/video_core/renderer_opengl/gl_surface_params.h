@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <climits>
 #include <boost/icl/interval.hpp>
 #include "common/assert.h"
 #include "common/math_util.h"
