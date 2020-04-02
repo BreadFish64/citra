@@ -32,6 +32,9 @@
 
 namespace OpenGL {
 
+class RasterizerCacheOpenGL;
+class TextureFilterer;
+
 struct TextureCubeConfig {
     PAddr px;
     PAddr nx;
@@ -133,8 +136,6 @@ private:
     bool valid = false;
 };
 
-class RasterizerCacheOpenGL;
-
 struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface> {
     CachedSurface(RasterizerCacheOpenGL& owner) : owner{owner} {}
 
@@ -229,8 +230,6 @@ struct CachedTextureCube {
     std::shared_ptr<SurfaceWatcher> pz;
     std::shared_ptr<SurfaceWatcher> nz;
 };
-
-class TextureFilterer;
 
 class RasterizerCacheOpenGL : NonCopyable {
 public:

@@ -2,14 +2,22 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <functional>
+#include <unordered_map>
 #include "common/logging/log.h"
 #include "video_core/renderer_opengl/texture_filters/anime4k/anime4k_ultrafast.h"
 #include "video_core/renderer_opengl/texture_filters/bicubic/bicubic.h"
+#include "video_core/renderer_opengl/texture_filters/texture_filter_base.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 #include "video_core/renderer_opengl/texture_filters/xbrz/xbrz_freescale.h"
 
 namespace OpenGL {
+
+    TextureFilterBase::TextureFilterBase(u16 scale_factor) : scale_factor{scale_factor} {}
+TextureFilterBase::~TextureFilterBase() = default;
+
+namespace {
 
 using TextureFilterContructor = std::function<std::unique_ptr<TextureFilterBase>(u16)>;
 
@@ -24,6 +32,8 @@ static const std::unordered_map<std::string_view, TextureFilterContructor> filte
     FilterMapPair<Bicubic>(),
     FilterMapPair<XbrzFreescale>(),
 };
+
+} // namespace
 
 TextureFilterer::TextureFilterer(std::string_view filter_name, u16 scale_factor) {
     Reset(filter_name, scale_factor);
@@ -45,7 +55,7 @@ bool TextureFilterer::Reset(std::string_view new_filter_name, u16 new_scale_fact
     return true;
 }
 
-bool OpenGL::TextureFilterer::IsNull() const {
+bool TextureFilterer::IsNull() const {
     return !filter;
 }
 
