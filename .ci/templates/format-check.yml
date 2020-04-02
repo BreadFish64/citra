@@ -1,0 +1,13 @@
+parameters:
+  artifactSource: 'false'
+
+steps:
+# Temporary fix for lacking dependency
+# - script: sudo apt-get update && sudo apt-get install p7zip-full
+#   displayName: 'Install missing dependencies'
+- template: ./sync-source.yml
+  parameters:
+    artifactSource: $(parameters.artifactSource)
+    needSubmodules: 'false'
+- script: ./.ci/scripts/format/exec.sh
+  displayName: 'Verify Formatting'
