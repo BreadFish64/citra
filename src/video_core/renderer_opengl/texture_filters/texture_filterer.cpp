@@ -14,9 +14,6 @@
 
 namespace OpenGL {
 
-    TextureFilterBase::TextureFilterBase(u16 scale_factor) : scale_factor{scale_factor} {}
-TextureFilterBase::~TextureFilterBase() = default;
-
 namespace {
 
 using TextureFilterContructor = std::function<std::unique_ptr<TextureFilterBase>(u16)>;
