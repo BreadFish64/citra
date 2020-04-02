@@ -13,7 +13,6 @@
 #include "core/hle/service/mic_u.h"
 #include "core/settings.h"
 #include "video_core/renderer_base.h"
-#include "video_core/renderer_opengl/texture_filters/texture_filter_manager.h"
 #include "video_core/video_core.h"
 
 namespace Settings {
@@ -38,9 +37,7 @@ void Apply() {
     VideoCore::g_renderer_bg_color_update_requested = true;
     VideoCore::g_renderer_sampler_update_requested = true;
     VideoCore::g_renderer_shader_update_requested = true;
-
-    OpenGL::TextureFilterManager::GetInstance().SetTextureFilter(values.texture_filter_name,
-                                                                 values.texture_filter_factor);
+    VideoCore::g_texture_filter_update_requested = true;
 
     auto& system = Core::System::GetInstance();
     if (system.IsPoweredOn()) {

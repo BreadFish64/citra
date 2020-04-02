@@ -26,9 +26,6 @@
 #include "common/common_types.h"
 #include "common/math_util.h"
 #include "core/custom_tex_cache.h"
-#include "core/hw/gpu.h"
-#include "video_core/regs_framebuffer.h"
-#include "video_core/regs_texturing.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_surface_params.h"
 #include "video_core/texture/texture_decode.h"
@@ -136,7 +133,11 @@ private:
     bool valid = false;
 };
 
+class RasterizerCacheOpenGL;
+
 struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface> {
+    CachedSurface(RasterizerCacheOpenGL& owner) : owner{owner} {}
+
     bool CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const;
     bool CanCopy(const SurfaceParams& dest_surface, SurfaceInterval copy_interval) const;
 
@@ -214,6 +215,7 @@ struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface
     }
 
 private:
+    RasterizerCacheOpenGL& owner;
     std::list<std::weak_ptr<SurfaceWatcher>> watchers;
 };
 
@@ -227,6 +229,8 @@ struct CachedTextureCube {
     std::shared_ptr<SurfaceWatcher> pz;
     std::shared_ptr<SurfaceWatcher> nz;
 };
+
+class TextureFilterer;
 
 class RasterizerCacheOpenGL : NonCopyable {
 public:
@@ -311,8 +315,12 @@ private:
     OGLProgram d24s8_abgr_shader;
     GLint d24s8_abgr_tbo_size_u_id;
     GLint d24s8_abgr_viewport_u_id;
+    u16 resolution_scale_factor;
 
     std::unordered_map<TextureCubeConfig, CachedTextureCube> texture_cube_cache;
+
+public:
+    std::unique_ptr<TextureFilterer> texture_filterer;
 };
 
 struct FormatTuple {

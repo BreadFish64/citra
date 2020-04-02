@@ -34,7 +34,7 @@
 #include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_vars.h"
-#include "video_core/renderer_opengl/texture_filters/texture_filter_manager.h"
+#include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 #include "video_core/utils.h"
 #include "video_core/video_core.h"
 
@@ -785,10 +785,6 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect, GLuint read_fb_
     if (Settings::values.custom_textures)
         is_custom = LoadCustomTexture(tex_hash, custom_tex_info);
 
-    TextureFilterInterface* const texture_filter =
-        is_custom ? nullptr : TextureFilterManager::GetInstance().GetTextureFilter();
-    const u16 default_scale = texture_filter ? texture_filter->scale_factor : 1;
-
     // Load data from memory to the surface
     GLint x0 = static_cast<GLint>(rect.left);
     GLint y0 = static_cast<GLint>(rect.bottom);
@@ -800,7 +796,7 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect, GLuint read_fb_
     // If not 1x scale, create 1x texture that we will blit from to replace texture subrect in
     // surface
     OGLTexture unscaled_tex;
-    if (res_scale != default_scale) {
+    if (res_scale != 1) {
         x0 = 0;
         y0 = 0;
 
@@ -809,8 +805,7 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect, GLuint read_fb_
             AllocateSurfaceTexture(unscaled_tex.handle, GetFormatTuple(PixelFormat::RGBA8),
                                    custom_tex_info.width, custom_tex_info.height);
         } else {
-            AllocateSurfaceTexture(unscaled_tex.handle, tuple, rect.GetWidth() * default_scale,
-                                   rect.GetHeight() * default_scale);
+            AllocateSurfaceTexture(unscaled_tex.handle, tuple, rect.GetWidth(), rect.GetHeight());
         }
         target_tex = unscaled_tex.handle;
     }
@@ -836,16 +831,6 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect, GLuint read_fb_
         glActiveTexture(GL_TEXTURE0);
         glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, custom_tex_info.width, custom_tex_info.height,
                         GL_RGBA, GL_UNSIGNED_BYTE, custom_tex_info.tex.data());
-    } else if (texture_filter) {
-        if (res_scale == default_scale) {
-            AllocateSurfaceTexture(texture.handle, GetFormatTuple(pixel_format),
-                                   rect.GetWidth() * default_scale,
-                                   rect.GetHeight() * default_scale);
-            cur_state.texture_units[0].texture_2d = texture.handle;
-            cur_state.Apply();
-        }
-        texture_filter->scale(*this, {(u32)x0, (u32)y0, rect.GetWidth(), rect.GetHeight()},
-                              buffer_offset);
     } else {
         glPixelStorei(GL_UNPACK_ROW_LENGTH, static_cast<GLint>(stride));
 
@@ -856,13 +841,13 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect, GLuint read_fb_
     }
 
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    if (Settings::values.dump_textures && !is_custom && !texture_filter)
+    if (Settings::values.dump_textures && !is_custom)
         DumpTexture(target_tex, tex_hash);
 
     cur_state.texture_units[0].texture_2d = old_tex;
     cur_state.Apply();
 
-    if (res_scale != default_scale) {
+    if (res_scale != 1) {
         auto scaled_rect = rect;
         scaled_rect.left *= res_scale;
         scaled_rect.top *= res_scale;
@@ -871,8 +856,11 @@ void CachedSurface::UploadGLTexture(Common::Rectangle<u32> rect, GLuint read_fb_
         auto from_rect =
             is_custom ? Common::Rectangle<u32>{0, custom_tex_info.height, custom_tex_info.width, 0}
                       : Common::Rectangle<u32>{0, rect.GetHeight(), rect.GetWidth(), 0};
-        BlitTextures(unscaled_tex.handle, from_rect, texture.handle, scaled_rect, type,
-                     read_fb_handle, draw_fb_handle);
+        if (!owner.texture_filterer->Filter(unscaled_tex.handle, from_rect, texture.handle,
+                                            scaled_rect, type, read_fb_handle, draw_fb_handle)) {
+            BlitTextures(unscaled_tex.handle, from_rect, texture.handle, scaled_rect, type,
+                         read_fb_handle, draw_fb_handle);
+        }
     }
 
     InvalidateAllWatcher();
@@ -1061,6 +1049,10 @@ Surface FindMatch(const SurfaceCache& surface_cache, const SurfaceParams& params
 }
 
 RasterizerCacheOpenGL::RasterizerCacheOpenGL() {
+    resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
+    texture_filterer = std::make_unique<TextureFilterer>(Settings::values.texture_filter_name,
+                                                         resolution_scale_factor);
+
     read_framebuffer.Create();
     draw_framebuffer.Create();
 
@@ -1337,11 +1329,7 @@ Surface RasterizerCacheOpenGL::GetTextureSurface(const Pica::Texture::TextureInf
     params.height = info.height;
     params.is_tiled = true;
     params.pixel_format = SurfaceParams::PixelFormatFromTextureFormat(info.format);
-    TextureFilterInterface* filter{};
-
-    params.res_scale = (filter = TextureFilterManager::GetInstance().GetTextureFilter())
-                           ? filter->scale_factor
-                           : 1;
+    params.res_scale = texture_filterer->IsNull() ? 1 : resolution_scale_factor;
     params.UpdateParams();
 
     u32 min_width = info.width >> max_level;
@@ -1554,10 +1542,9 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
     const auto& config = regs.framebuffer.framebuffer;
 
     // update resolution_scale_factor and reset cache if changed
-    static u16 resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
-    if (resolution_scale_factor != VideoCore::GetResolutionScaleFactor() ||
-        TextureFilterManager::GetInstance().IsUpdated()) {
-        TextureFilterManager::GetInstance().Reset();
+    if ((resolution_scale_factor != VideoCore::GetResolutionScaleFactor()) |
+        (VideoCore::g_texture_filter_update_requested.exchange(false) &&
+         texture_filterer->Reset(Settings::values.texture_filter_name, resolution_scale_factor))) {
         resolution_scale_factor = VideoCore::GetResolutionScaleFactor();
         FlushAll();
         while (!surface_cache.empty())
@@ -1642,7 +1629,7 @@ SurfaceSurfaceRect_Tuple RasterizerCacheOpenGL::GetFramebufferSurfaces(
 }
 
 Surface RasterizerCacheOpenGL::GetFillSurface(const GPU::Regs::MemoryFillConfig& config) {
-    Surface new_surface = std::make_shared<CachedSurface>();
+    Surface new_surface = std::make_shared<CachedSurface>(*this);
 
     new_surface->addr = config.GetStartAddress();
     new_surface->end = config.GetEndAddress();
@@ -1870,7 +1857,7 @@ void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface
 }
 
 Surface RasterizerCacheOpenGL::CreateSurface(const SurfaceParams& params) {
-    Surface surface = std::make_shared<CachedSurface>();
+    Surface surface = std::make_shared<CachedSurface>(*this);
     static_cast<SurfaceParams&>(*surface) = params;
 
     surface->texture.Create();
