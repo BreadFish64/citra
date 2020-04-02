@@ -14,7 +14,7 @@ namespace OpenGL {
 using TextureFilterContructor = std::function<std::unique_ptr<TextureFilterBase>(u16)>;
 
 template <typename T>
-constexpr std::pair<std::string_view, TextureFilterContructor> FilterMapPair() {
+std::pair<std::string_view, TextureFilterContructor> FilterMapPair() {
     return {T::NAME, std::make_unique<T, u16>};
 };
 
