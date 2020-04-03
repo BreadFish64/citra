@@ -1118,6 +1118,15 @@ Surface RasterizerCacheOpenGL::GetSurface(const SurfaceParams& params, ScaleMatc
             if (expandable != nullptr && expandable->res_scale > target_res_scale) {
                 target_res_scale = expandable->res_scale;
             }
+            // Keep res_scale when reinterpreting d24s8 -> rgba8
+            if (params.pixel_format == PixelFormat::RGBA8) {
+                find_params.pixel_format = PixelFormat::D24S8;
+                expandable = FindMatch<MatchFlags::Expand | MatchFlags::Invalid>(
+                    surface_cache, find_params, match_res_scale);
+                if (expandable != nullptr && expandable->res_scale > target_res_scale) {
+                    target_res_scale = expandable->res_scale;
+                }
+            }
         }
         SurfaceParams new_params = params;
         new_params.res_scale = target_res_scale;
@@ -1739,7 +1748,7 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
                                  draw_framebuffer.handle);
         notify_validated(params.GetInterval());
     }
-} // namespace OpenGL
+}
 
 void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
     if (size == 0)
