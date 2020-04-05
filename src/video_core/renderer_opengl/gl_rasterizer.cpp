@@ -1352,12 +1352,12 @@ void RasterizerOpenGL::FlushAll() {
 }
 
 void RasterizerOpenGL::FlushRegion(PAddr addr, u32 size) {
-    MICROPROFILE_SCOPE(OpenGL_CacheManagement);
+    //MICROPROFILE_SCOPE(OpenGL_CacheManagement);
     res_cache.FlushRegion(addr, size);
 }
 
 void RasterizerOpenGL::InvalidateRegion(PAddr addr, u32 size) {
-    MICROPROFILE_SCOPE(OpenGL_CacheManagement);
+    //MICROPROFILE_SCOPE(OpenGL_CacheManagement);
     res_cache.InvalidateRegion(addr, size, nullptr);
 }
 

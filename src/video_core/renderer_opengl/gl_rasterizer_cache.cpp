@@ -1753,24 +1753,24 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
 }
 
 void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
-    if (size == 0)
+    if (size == 0 || dirty_regions.rbegin()->first.upper() < addr)
         return;
 
     const SurfaceInterval flush_interval(addr, addr + size);
-    SurfaceRegions flushed_intervals;
 
-    for (auto& pair : RangeFromInterval(dirty_regions, flush_interval)) {
+    const auto regions = RangeFromInterval(dirty_regions, flush_interval);
+    for (auto& pair : regions) {
         // small sizes imply that this most likely comes from the cpu, flush the entire region
         // the point is to avoid thousands of small writes every frame if the cpu decides to
         // access that region, anything higher than 8 you're guaranteed it comes from a service
-        const auto interval = size <= 8 ? pair.first : pair.first & flush_interval;
+        const auto interval = pair.first;
         auto& surface = pair.second;
 
         if (flush_surface != nullptr && surface != flush_surface)
             continue;
 
         // Sanity check, this surface is the last one that marked this region dirty
-        ASSERT(surface->IsRegionValid(interval));
+        DEBUG_ASSERT(surface->IsRegionValid(interval));
 
         if (surface->type != SurfaceType::Fill) {
             SurfaceParams params = surface->FromInterval(interval);
@@ -1778,10 +1778,9 @@ void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surf
                                        draw_framebuffer.handle);
         }
         surface->FlushGLBuffer(boost::icl::first(interval), boost::icl::last_next(interval));
-        flushed_intervals += interval;
     }
     // Reset dirty regions
-    dirty_regions -= flushed_intervals;
+    dirty_regions.erase(regions.begin(), regions.end());
 }
 
 void RasterizerCacheOpenGL::FlushAll() {
@@ -1789,7 +1788,7 @@ void RasterizerCacheOpenGL::FlushAll() {
 }
 
 void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {
-    if (size == 0)
+    if (size == 0 || surface_cache.rbegin()->first.upper() < addr)
         return;
 
     const SurfaceInterval invalid_interval(addr, addr + size);
@@ -1802,7 +1801,8 @@ void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface
         region_owner->invalid_regions.erase(invalid_interval);
     }
 
-    for (auto& pair : RangeFromInterval(surface_cache, invalid_interval)) {
+    auto regions = RangeFromInterval(surface_cache, invalid_interval);
+    for (auto& pair : regions) {
         for (auto& cached_surface : pair.second) {
             if (cached_surface == region_owner)
                 continue;
