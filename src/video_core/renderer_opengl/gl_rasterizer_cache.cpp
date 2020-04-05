@@ -1675,9 +1675,9 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
                     AllocateSurfaceTexture(tmp_tex.handle,
                                            GetFormatTuple(reinterpreter->first.dst_format),
                                            tmp_rect.right, tmp_rect.top);
-                    format_reinterpreter->Reinterpret(
-                        reinterpreter, reinterpret_surface->texture.handle, src_rect,
-                        read_framebuffer.handle, tmp_tex.handle, tmp_rect, draw_framebuffer.handle);
+                    reinterpreter->second->Reinterpret(
+                        reinterpret_surface->texture.handle, src_rect, read_framebuffer.handle,
+                        tmp_tex.handle, tmp_rect, draw_framebuffer.handle);
                     SurfaceParams::SurfaceType type =
                         SurfaceParams::GetFormatType(reinterpreter->first.dst_format);
 
@@ -1688,10 +1688,9 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
                                      type, read_framebuffer.handle, draw_framebuffer.handle);
                     }
                 } else {
-                    format_reinterpreter->Reinterpret(
-                        reinterpreter, reinterpret_surface->texture.handle, src_rect,
-                        read_framebuffer.handle, surface->texture.handle, dest_rect,
-                        draw_framebuffer.handle);
+                    reinterpreter->second->Reinterpret(
+                        reinterpret_surface->texture.handle, src_rect, read_framebuffer.handle,
+                        surface->texture.handle, dest_rect, draw_framebuffer.handle);
                 }
                 notify_validated(reinterpret_interval);
                 retry = true;
@@ -1738,8 +1737,11 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
                 retry = true;
             }
         }
-        if (retry)
+        if (retry) {
+            LOG_DEBUG(Render_OpenGL, "Region created fully on GPU and reinterpretation is "
+                                     "invalid. Skipping validation");
             continue;
+        }
 
         // Load data from 3DS memory
         FlushRegion(params.addr, params.size);

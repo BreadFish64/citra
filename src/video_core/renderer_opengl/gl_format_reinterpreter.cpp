@@ -10,46 +10,11 @@
 #include "video_core/renderer_opengl/gl_vars.h"
 #include "video_core/renderer_opengl/texture_filters/texture_filterer.h"
 
-#if PROFILE_FORMAT_REINTERPRETATIONS
-#include <fmt/chrono.h>
-#endif
-
 namespace OpenGL {
 
 using PixelFormat = SurfaceParams::PixelFormat;
 
 class RGBA4toRGB5A1 final : public FormatReinterpreterBase {
-    OGLProgram program;
-    GLint dst_size_loc{-1}, src_size_loc{-1}, src_offset_loc{-1};
-    OGLVertexArray vao;
-
-    void Reinterpret(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint read_fb_handle,
-                     GLuint dst_tex, const Common::Rectangle<u32>& dst_rect,
-                     GLuint draw_fb_handle) override {
-        OpenGLState prev_state = OpenGLState::GetCurState();
-        SCOPE_EXIT({ prev_state.Apply(); });
-
-        OpenGLState state;
-        state.texture_units[0].texture_2d = src_tex;
-        state.draw.draw_framebuffer = draw_fb_handle;
-        state.draw.shader_program = program.handle;
-        state.draw.vertex_array = vao.handle;
-        state.viewport = {static_cast<GLint>(dst_rect.left), static_cast<GLint>(dst_rect.bottom),
-                          static_cast<GLsizei>(dst_rect.GetWidth()),
-                          static_cast<GLsizei>(dst_rect.GetHeight())};
-        state.Apply();
-
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst_tex,
-                               0);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                               0);
-
-        glUniform2i(dst_size_loc, dst_rect.GetWidth(), dst_rect.GetHeight());
-        glUniform2i(src_size_loc, src_rect.GetWidth(), src_rect.GetHeight());
-        glUniform2i(src_offset_loc, src_rect.left, src_rect.bottom);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    }
-
 public:
     RGBA4toRGB5A1() {
         constexpr std::string_view vs_source = R"(
@@ -66,7 +31,7 @@ void main() {
 }
 )";
 
-        std::string_view fs_source = R"(
+        constexpr std::string_view fs_source = R"(
 in mediump vec2 dst_coord;
 
 out lowp vec4 frag_color;
@@ -100,9 +65,90 @@ void main() {
         src_offset_loc = glGetUniformLocation(program.handle, "src_offset");
         vao.Create();
     }
+
+    void Reinterpret(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint read_fb_handle,
+                     GLuint dst_tex, const Common::Rectangle<u32>& dst_rect,
+                     GLuint draw_fb_handle) override {
+        OpenGLState prev_state = OpenGLState::GetCurState();
+        SCOPE_EXIT({ prev_state.Apply(); });
+
+        OpenGLState state;
+        state.texture_units[0].texture_2d = src_tex;
+        state.draw.draw_framebuffer = draw_fb_handle;
+        state.draw.shader_program = program.handle;
+        state.draw.vertex_array = vao.handle;
+        state.viewport = {static_cast<GLint>(dst_rect.left), static_cast<GLint>(dst_rect.bottom),
+                          static_cast<GLsizei>(dst_rect.GetWidth()),
+                          static_cast<GLsizei>(dst_rect.GetHeight())};
+        state.Apply();
+
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst_tex,
+                               0);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
+                               0);
+
+        glUniform2i(dst_size_loc, dst_rect.GetWidth(), dst_rect.GetHeight());
+        glUniform2i(src_size_loc, src_rect.GetWidth(), src_rect.GetHeight());
+        glUniform2i(src_offset_loc, src_rect.left, src_rect.bottom);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
+
+private:
+    OGLProgram program;
+    GLint dst_size_loc{-1}, src_size_loc{-1}, src_offset_loc{-1};
+    OGLVertexArray vao;
 };
 
 class PixelBufferD24S8toABGR final : public FormatReinterpreterBase {
+public:
+    PixelBufferD24S8toABGR() {
+        attributeless_vao.Create();
+        d24s8_abgr_buffer.Create();
+        d24s8_abgr_buffer_size = 0;
+
+        constexpr std::string_view vs_source = R"(
+const vec2 vertices[4] = vec2[4](vec2(-1.0, -1.0), vec2(1.0, -1.0),
+                                 vec2(-1.0,  1.0), vec2(1.0,  1.0));
+void main() {
+    gl_Position = vec4(vertices[gl_VertexID], 0.0, 1.0);
+}
+)";
+
+        std::string fs_source = GLES ? fragment_shader_precision_OES : "";
+        fs_source += R"(
+uniform samplerBuffer tbo;
+uniform vec2 tbo_size;
+uniform vec4 viewport;
+
+out vec4 color;
+
+void main() {
+    vec2 tbo_coord = (gl_FragCoord.xy - viewport.xy) * tbo_size / viewport.zw;
+    int tbo_offset = int(tbo_coord.y) * int(tbo_size.x) + int(tbo_coord.x);
+    color = texelFetch(tbo, tbo_offset).rabg;
+}
+)";
+        d24s8_abgr_shader.Create(vs_source.data(), fs_source.c_str());
+
+        OpenGLState state = OpenGLState::GetCurState();
+        GLuint old_program = state.draw.shader_program;
+        state.draw.shader_program = d24s8_abgr_shader.handle;
+        state.Apply();
+
+        GLint tbo_u_id = glGetUniformLocation(d24s8_abgr_shader.handle, "tbo");
+        ASSERT(tbo_u_id != -1);
+        glUniform1i(tbo_u_id, 0);
+
+        state.draw.shader_program = old_program;
+        state.Apply();
+
+        d24s8_abgr_tbo_size_u_id = glGetUniformLocation(d24s8_abgr_shader.handle, "tbo_size");
+        ASSERT(d24s8_abgr_tbo_size_u_id != -1);
+        d24s8_abgr_viewport_u_id = glGetUniformLocation(d24s8_abgr_shader.handle, "viewport");
+        ASSERT(d24s8_abgr_viewport_u_id != -1);
+    }
+
+    ~PixelBufferD24S8toABGR() {}
 
     void Reinterpret(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint read_fb_handle,
                      GLuint dst_tex, const Common::Rectangle<u32>& dst_rect,
@@ -165,56 +211,6 @@ class PixelBufferD24S8toABGR final : public FormatReinterpreterBase {
         glBindTexture(GL_TEXTURE_BUFFER, 0);
     }
 
-public:
-    PixelBufferD24S8toABGR() {
-        attributeless_vao.Create();
-        d24s8_abgr_buffer.Create();
-        d24s8_abgr_buffer_size = 0;
-
-        constexpr std::string_view vs_source = R"(
-const vec2 vertices[4] = vec2[4](vec2(-1.0, -1.0), vec2(1.0, -1.0),
-                                 vec2(-1.0,  1.0), vec2(1.0,  1.0));
-void main() {
-    gl_Position = vec4(vertices[gl_VertexID], 0.0, 1.0);
-}
-)";
-
-        std::string fs_source = GLES ? fragment_shader_precision_OES : "";
-        fs_source += R"(
-uniform samplerBuffer tbo;
-uniform vec2 tbo_size;
-uniform vec4 viewport;
-
-out vec4 color;
-
-void main() {
-    vec2 tbo_coord = (gl_FragCoord.xy - viewport.xy) * tbo_size / viewport.zw;
-    int tbo_offset = int(tbo_coord.y) * int(tbo_size.x) + int(tbo_coord.x);
-    color = texelFetch(tbo, tbo_offset).rabg;
-}
-)";
-        d24s8_abgr_shader.Create(vs_source.data(), fs_source.c_str());
-
-        OpenGLState state = OpenGLState::GetCurState();
-        GLuint old_program = state.draw.shader_program;
-        state.draw.shader_program = d24s8_abgr_shader.handle;
-        state.Apply();
-
-        GLint tbo_u_id = glGetUniformLocation(d24s8_abgr_shader.handle, "tbo");
-        ASSERT(tbo_u_id != -1);
-        glUniform1i(tbo_u_id, 0);
-
-        state.draw.shader_program = old_program;
-        state.Apply();
-
-        d24s8_abgr_tbo_size_u_id = glGetUniformLocation(d24s8_abgr_shader.handle, "tbo_size");
-        ASSERT(d24s8_abgr_tbo_size_u_id != -1);
-        d24s8_abgr_viewport_u_id = glGetUniformLocation(d24s8_abgr_shader.handle, "viewport");
-        ASSERT(d24s8_abgr_viewport_u_id != -1);
-    }
-
-    ~PixelBufferD24S8toABGR() {}
-
 private:
     OGLVertexArray attributeless_vao;
     OGLBuffer d24s8_abgr_buffer;
@@ -237,63 +233,6 @@ std::pair<FormatReinterpreterOpenGL::ReinterpreterMap::iterator,
           FormatReinterpreterOpenGL::ReinterpreterMap::iterator>
 FormatReinterpreterOpenGL::GetPossibleReinterpretations(PixelFormat dst_format) {
     return reinterpreters.equal_range(dst_format);
-}
-
-void OpenGL::FormatReinterpreterOpenGL::Reinterpret(ReinterpreterMap::iterator reinterpreter,
-                                                    GLuint src_tex,
-                                                    const Common::Rectangle<u32>& src_rect,
-                                                    GLuint read_fb_handle, GLuint dst_tex,
-                                                    const Common::Rectangle<u32>& dst_rect,
-                                                    GLuint draw_fb_handle) {
-#if PROFILE_FORMAT_REINTERPRETATIONS
-    ASSERT(GLAD_GL_ARB_timer_query);
-
-    for (auto desc = profile_queue.begin(); desc != profile_queue.end();) {
-        GLint available{false};
-        glGetQueryObjectiv(desc->gpu_time_query, GL_QUERY_RESULT_AVAILABLE, &available);
-
-        if (available) {
-            GLuint64 gpu_time_ns{};
-            glGetQueryObjectui64v(desc->gpu_time_query, GL_QUERY_RESULT, &gpu_time_ns);
-            std::chrono::duration<double, std::milli> gpu_time{
-                std::chrono::duration<GLuint64, std::nano>{gpu_time_ns}};
-
-            LOG_INFO(Render_OpenGL, R"(Reinterpretation Profile
-Format:   {} -> {}
-Rect:     {{{}, {}, {}, {}}} -> {{{}, {}, {}, {}}}
-CPU Time: {}
-GPU Time: {}
-)",
-                     SurfaceParams::PixelFormatAsString(desc->src_format),
-                     SurfaceParams::PixelFormatAsString(desc->dst_format), desc->src_rect.left,
-                     desc->src_rect.bottom, desc->src_rect.GetWidth(), desc->src_rect.GetHeight(),
-                     desc->dst_rect.left, desc->dst_rect.bottom, desc->dst_rect.GetWidth(),
-                     desc->dst_rect.GetHeight(), desc->cpu_time, gpu_time);
-
-            desc = profile_queue.erase(desc);
-        } else {
-            ++desc;
-        }
-    }
-
-    ReinterpretationDescription desc{};
-    desc.src_rect = src_rect;
-    desc.dst_rect = dst_rect;
-    desc.src_format = reinterpreter->first.src_format;
-    desc.dst_format = reinterpreter->first.dst_format;
-    glGenQueries(1, &desc.gpu_time_query);
-    glBeginQuery(GL_TIME_ELAPSED, desc.gpu_time_query);
-    auto start = std::chrono::high_resolution_clock::now();
-#endif
-
-    reinterpreter->second->Reinterpret(src_tex, src_rect, read_fb_handle, dst_tex, dst_rect,
-                                       draw_fb_handle);
-
-#if PROFILE_FORMAT_REINTERPRETATIONS
-    desc.cpu_time = std::chrono::high_resolution_clock::now() - start;
-    glEndQuery(GL_TIME_ELAPSED);
-    profile_queue.emplace_back(std::move(desc));
-#endif
 }
 
 } // namespace OpenGL
