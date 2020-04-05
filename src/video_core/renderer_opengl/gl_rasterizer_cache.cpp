@@ -1770,7 +1770,11 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
 }
 
 void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
-    if (size == 0)
+    if (size == 0 ||
+        // Some games such as Phoenix Wright: Ace Attorney - Dual Destinies write to a cached page,
+        // but the memory it's writing to is past the end of the surface cache.
+        // In this case we should exit early to avoid a worst case binary search.
+        surface_cache.rbegin()->first.upper() < addr)
         return;
 
     const SurfaceInterval flush_interval(addr, addr + size);
@@ -1806,7 +1810,11 @@ void RasterizerCacheOpenGL::FlushAll() {
 }
 
 void RasterizerCacheOpenGL::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {
-    if (size == 0)
+    if (size == 0 ||
+        // Some games such as Phoenix Wright: Ace Attorney - Dual Destinies write to a cached page,
+        // but the memory it's writing to is past the end of the surface cache.
+        // In this case we should exit early to avoid a worst case binary search.
+        surface_cache.rbegin()->first.upper() < addr)
         return;
 
     const SurfaceInterval invalid_interval(addr, addr + size);
