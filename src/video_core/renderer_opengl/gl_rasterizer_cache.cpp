@@ -1730,17 +1730,13 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
         // If the region was created entirely on the GPU,
         // assume it was a developer mistake and skip flushing.
         if (retry) {
-            retry = false;
-            for (const auto& pair : RangeFromInterval(dirty_regions, interval)) {
-                // Don't actually validate the region, and instead just skip it for now.
-                validate_regions.erase(pair.first & interval);
-                retry = true;
+            auto range = dirty_regions.equal_range(interval);
+            if (range.first != dirty_regions.end() && (range.first->first & interval) == interval) {
+                LOG_DEBUG(Render_OpenGL, "Region created fully on GPU and reinterpretation is "
+                                         "invalid. Skipping validation");
+                validate_regions.erase(interval);
+                continue;
             }
-        }
-        if (retry) {
-            LOG_DEBUG(Render_OpenGL, "Region created fully on GPU and reinterpretation is "
-                                     "invalid. Skipping validation");
-            continue;
         }
 
         // Load data from 3DS memory
