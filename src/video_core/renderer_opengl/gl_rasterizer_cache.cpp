@@ -1646,92 +1646,18 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
 
         // Try to find surface in cache with different format
         // that can can be reinterpreted to the requested format.
-        auto [cvt_begin, cvt_end] =
-            format_reinterpreter->GetPossibleReinterpretations(surface->pixel_format);
-        bool retry = false;
-        for (auto reinterpreter = cvt_begin; reinterpreter != cvt_end; ++reinterpreter) {
-            PixelFormat format = reinterpreter->first.src_format;
-            params.pixel_format = format;
-            Surface reinterpret_surface =
-                FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
-
-            if (reinterpret_surface != nullptr) {
-                SurfaceInterval reinterpret_interval =
-                    params.GetCopyableInterval(reinterpret_surface);
-                SurfaceParams reinterpret_params = surface->FromInterval(reinterpret_interval);
-                auto src_rect = reinterpret_surface->GetScaledSubRect(reinterpret_params);
-                auto dest_rect = surface->GetScaledSubRect(reinterpret_params);
-
-                if (!texture_filterer->IsNull() && reinterpret_surface->res_scale == 1 &&
-                    surface->res_scale == resolution_scale_factor) {
-                    // The destination surface is either a framebuffer, or a filtered texture.
-                    OGLTexture tmp_tex;
-                    tmp_tex.Create();
-                    // Create an intermediate surface to convert to before blitting to the
-                    // destination.
-                    Common::Rectangle<u32> tmp_rect{
-                        0, dest_rect.GetHeight() / resolution_scale_factor,
-                        dest_rect.GetWidth() / resolution_scale_factor, 0};
-                    AllocateSurfaceTexture(tmp_tex.handle,
-                                           GetFormatTuple(reinterpreter->first.dst_format),
-                                           tmp_rect.right, tmp_rect.top);
-                    reinterpreter->second->Reinterpret(
-                        reinterpret_surface->texture.handle, src_rect, read_framebuffer.handle,
-                        tmp_tex.handle, tmp_rect, draw_framebuffer.handle);
-                    SurfaceParams::SurfaceType type =
-                        SurfaceParams::GetFormatType(reinterpreter->first.dst_format);
-
-                    if (!texture_filterer->Filter(tmp_tex.handle, tmp_rect, surface->texture.handle,
-                                                  dest_rect, type, read_framebuffer.handle,
-                                                  draw_framebuffer.handle)) {
-                        BlitTextures(tmp_tex.handle, tmp_rect, surface->texture.handle, dest_rect,
-                                     type, read_framebuffer.handle, draw_framebuffer.handle);
-                    }
-                } else {
-                    reinterpreter->second->Reinterpret(
-                        reinterpret_surface->texture.handle, src_rect, read_framebuffer.handle,
-                        surface->texture.handle, dest_rect, draw_framebuffer.handle);
-                }
-                notify_validated(reinterpret_interval);
-                retry = true;
-                break;
-            }
-        }
-        if (retry)
+        if (ValidateByReinterpretation(surface, params, interval)) {
+            notify_validated(interval);
             continue;
-
+        }
         // Could not find a matching reinterpreter, check if we need to implement a
         // reinterpreter
-        static constexpr std::array<PixelFormat, 17> all_formats{
-            PixelFormat::RGBA8, PixelFormat::RGB8,   PixelFormat::RGB5A1, PixelFormat::RGB565,
-            PixelFormat::RGBA4, PixelFormat::IA8,    PixelFormat::RG8,    PixelFormat::I8,
-            PixelFormat::A8,    PixelFormat::IA4,    PixelFormat::I4,     PixelFormat::A4,
-            PixelFormat::ETC1,  PixelFormat::ETC1A4, PixelFormat::D16,    PixelFormat::D24,
-            PixelFormat::D24S8,
-        };
-        retry = true;
-        for (PixelFormat format : all_formats) {
-            if (SurfaceParams::GetFormatBpp(format) == surface->GetFormatBpp()) {
-                params.pixel_format = format;
-                // This could potentially be expensive,
-                // although experimentally it hasn't been too bad
-                Surface test_surface = FindMatch<MatchFlags::Copy>(surface_cache, params,
-                                                                   ScaleMatch::Ignore, interval);
-                if (test_surface != nullptr) {
-                    LOG_ERROR(Render_OpenGL, "Missing reinterpreter: {} -> {}",
-                              SurfaceParams::PixelFormatAsString(format),
-                              SurfaceParams::PixelFormatAsString(surface->pixel_format));
-                    retry = false;
-                }
-            }
-        }
-
-        // No surfaces were found in the cache that had a matching bit-width.
-        // If the region was created entirely on the GPU,
-        // assume it was a developer mistake and skip flushing.
-        if (retry) {
-            auto range = dirty_regions.equal_range(interval);
-            if (range.first != dirty_regions.end() && (range.first->first & interval) == interval) {
+        if (NoUnimplementedReinterpretations(surface, params, interval) &&
+            !IntervalHasInvalidPixelFormat(params, interval)) {
+            // No surfaces were found in the cache that had a matching bit-width.
+            // If the region was created entirely on the GPU,
+            // assume it was a developer mistake and skip flushing.
+            if (boost::icl::contains(dirty_regions, interval)) {
                 LOG_DEBUG(Render_OpenGL, "Region created fully on GPU and reinterpretation is "
                                          "invalid. Skipping validation");
                 validate_regions.erase(interval);
@@ -1746,6 +1672,99 @@ void RasterizerCacheOpenGL::ValidateSurface(const Surface& surface, PAddr addr, 
                                  draw_framebuffer.handle);
         notify_validated(params.GetInterval());
     }
+}
+
+bool RasterizerCacheOpenGL::NoUnimplementedReinterpretations(const Surface& surface,
+                                                             SurfaceParams& params,
+                                                             const SurfaceInterval& interval) {
+    static constexpr std::array<PixelFormat, 17> all_formats{
+        PixelFormat::RGBA8, PixelFormat::RGB8,   PixelFormat::RGB5A1, PixelFormat::RGB565,
+        PixelFormat::RGBA4, PixelFormat::IA8,    PixelFormat::RG8,    PixelFormat::I8,
+        PixelFormat::A8,    PixelFormat::IA4,    PixelFormat::I4,     PixelFormat::A4,
+        PixelFormat::ETC1,  PixelFormat::ETC1A4, PixelFormat::D16,    PixelFormat::D24,
+        PixelFormat::D24S8,
+    };
+    bool implemented = true;
+    for (PixelFormat format : all_formats) {
+        if (SurfaceParams::GetFormatBpp(format) == surface->GetFormatBpp()) {
+            params.pixel_format = format;
+            // This could potentially be expensive,
+            // although experimentally it hasn't been too bad
+            Surface test_surface =
+                FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
+            if (test_surface != nullptr) {
+                LOG_WARNING(Render_OpenGL, "Missing pixel_format reinterpreter: {} -> {}",
+                            SurfaceParams::PixelFormatAsString(format),
+                            SurfaceParams::PixelFormatAsString(surface->pixel_format));
+                implemented = false;
+            }
+        }
+    }
+    return implemented;
+}
+
+bool RasterizerCacheOpenGL::IntervalHasInvalidPixelFormat(SurfaceParams& params,
+                                                          const SurfaceInterval& interval) {
+    params.pixel_format = PixelFormat::Invalid;
+    for (const auto& set : RangeFromInterval(surface_cache, interval))
+        for (const auto& surface : set.second)
+            if (surface->pixel_format == PixelFormat::Invalid) {
+                LOG_WARNING(Render_OpenGL, "Surface found with invalid pixel format");
+                return true;
+            }
+    return false;
+}
+
+bool RasterizerCacheOpenGL::ValidateByReinterpretation(const Surface& surface,
+                                                       SurfaceParams& params,
+                                                       const SurfaceInterval& interval) {
+    auto [cvt_begin, cvt_end] =
+        format_reinterpreter->GetPossibleReinterpretations(surface->pixel_format);
+    for (auto reinterpreter = cvt_begin; reinterpreter != cvt_end; ++reinterpreter) {
+        PixelFormat format = reinterpreter->first.src_format;
+        params.pixel_format = format;
+        Surface reinterpret_surface =
+            FindMatch<MatchFlags::Copy>(surface_cache, params, ScaleMatch::Ignore, interval);
+
+        if (reinterpret_surface != nullptr) {
+            SurfaceInterval reinterpret_interval = params.GetCopyableInterval(reinterpret_surface);
+            SurfaceParams reinterpret_params = surface->FromInterval(reinterpret_interval);
+            auto src_rect = reinterpret_surface->GetScaledSubRect(reinterpret_params);
+            auto dest_rect = surface->GetScaledSubRect(reinterpret_params);
+
+            if (!texture_filterer->IsNull() && reinterpret_surface->res_scale == 1 &&
+                surface->res_scale == resolution_scale_factor) {
+                // The destination surface is either a framebuffer, or a filtered texture.
+                OGLTexture tmp_tex;
+                tmp_tex.Create();
+                // Create an intermediate surface to convert to before blitting to the
+                // destination.
+                Common::Rectangle<u32> tmp_rect{0, dest_rect.GetHeight() / resolution_scale_factor,
+                                                dest_rect.GetWidth() / resolution_scale_factor, 0};
+                AllocateSurfaceTexture(tmp_tex.handle,
+                                       GetFormatTuple(reinterpreter->first.dst_format),
+                                       tmp_rect.right, tmp_rect.top);
+                reinterpreter->second->Reinterpret(reinterpret_surface->texture.handle, src_rect,
+                                                   read_framebuffer.handle, tmp_tex.handle,
+                                                   tmp_rect, draw_framebuffer.handle);
+                SurfaceParams::SurfaceType type =
+                    SurfaceParams::GetFormatType(reinterpreter->first.dst_format);
+
+                if (!texture_filterer->Filter(tmp_tex.handle, tmp_rect, surface->texture.handle,
+                                              dest_rect, type, read_framebuffer.handle,
+                                              draw_framebuffer.handle)) {
+                    BlitTextures(tmp_tex.handle, tmp_rect, surface->texture.handle, dest_rect, type,
+                                 read_framebuffer.handle, draw_framebuffer.handle);
+                }
+            } else {
+                reinterpreter->second->Reinterpret(reinterpret_surface->texture.handle, src_rect,
+                                                   read_framebuffer.handle, surface->texture.handle,
+                                                   dest_rect, draw_framebuffer.handle);
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
