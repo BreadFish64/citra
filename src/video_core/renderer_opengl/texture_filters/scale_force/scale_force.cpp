@@ -48,7 +48,7 @@ ScaleForce::ScaleForce(u16 scale_factor) : TextureFilterBase(scale_factor) {
     glSamplerParameteri(src_sampler.handle, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glSamplerParameteri(src_sampler.handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glSamplerParameteri(src_sampler.handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-} // namespace OpenGL
+}
 
 void ScaleForce::Filter(GLuint src_tex, const Common::Rectangle<u32>& src_rect, GLuint dst_tex,
                         const Common::Rectangle<u32>& dst_rect, GLuint read_fb_handle,
