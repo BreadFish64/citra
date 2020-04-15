@@ -1,8 +1,35 @@
-//? #version 330
+//? #version 320 es
 
-in vec2 tex_coord;
+// from https://github.com/BreadFish64/ScaleFish/tree/master/scale_force
+// shader adapted to GLSL 320 es and debugging outputs stripped
 
-out vec4 frag_color;
+// MIT License
+//
+// Copyright (c) 2020 BreadFish64
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+precision mediump float;
+
+in highp vec2 tex_coord;
+
+out mediump vec4 frag_color;
 
 uniform sampler2D input_texture;
 
@@ -65,6 +92,7 @@ void main() {
     vec4 center_texel = texture(input_texture, tex_coord);
     vec2 final_offset = vec2(0.0);
     float total_diff = 0.0;
+
     for (int y = -radius; y <= radius; ++y) {
         for (int x = -radius; x <= radius; ++x) {
             if (0 == (x | y))
@@ -77,6 +105,7 @@ void main() {
             final_offset += diff * offset;
         }
     }
+
     float clamp_val = length(final_offset) / total_diff;
     final_offset = clamp(final_offset, -clamp_val, clamp_val);
     frag_color = textureBicubic(input_texture, tex_coord - final_offset / input_size);
