@@ -781,15 +781,23 @@ private:
 
     void Generate() {
         if (sanitize_mul) {
-            shader.AddLine("vec4 sanitize_mul(vec4 lhs, vec4 rhs) {");
-            ++shader.scope;
-            shader.AddLine("vec4 product = lhs * rhs;");
-            shader.AddLine(
-                "bvec4 condition = equal(ivec4(0), ivec4(isnan(lhs)) & ivec4(isnan(rhs)) & "
-                "ivec4(not(isnan(product))));");
-            shader.AddLine("return mix(vec4(0.0), product, condition);");
-            --shader.scope;
-            shader.AddLine("}\n");
+            shader.AddLine(R"(
+vec4 sanitize_mul(vec4 lhs, vec4 rhs) {
+    vec4 product = lhs * rhs;
+    bvec4 p_isnan = isnan(lhs);
+    if(any(p_isnan)){
+        bvec4 condition = bvec4(ivec4(not(isnan(lhs))) & ivec4(not(isnan(rhs))) & ivec4(p_isnan));
+        return vec4(
+            condition.x ? 0.0 : product.x,
+            condition.y ? 0.0 : product.y,
+            condition.z ? 0.0 : product.z,
+            condition.w ? 0.0 : product.w
+        );
+    } else {
+        return product;
+    }
+}
+)");
         }
 
         // Add declarations for registers
