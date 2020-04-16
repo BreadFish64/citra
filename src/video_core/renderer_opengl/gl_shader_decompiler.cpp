@@ -784,8 +784,10 @@ private:
             shader.AddLine("vec4 sanitize_mul(vec4 lhs, vec4 rhs) {");
             ++shader.scope;
             shader.AddLine("vec4 product = lhs * rhs;");
-            shader.AddLine("return mix(product, mix(mix(vec4(0.0), product, isnan(rhs)), product, "
-                           "isnan(lhs)), isnan(product));");
+            shader.AddLine(
+                "bvec4 condition = equal(ivec4(0), ivec4(isnan(lhs)) & ivec4(isnan(rhs)) & "
+                "ivec4(not(isnan(product))));");
+            shader.AddLine("return mix(vec4(0.0), product, condition);");
             --shader.scope;
             shader.AddLine("}\n");
         }

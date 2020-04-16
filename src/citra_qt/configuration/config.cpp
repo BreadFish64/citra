@@ -438,7 +438,7 @@ void Config::ReadRendererValues() {
     Settings::values.use_hw_shader = ReadSetting(QStringLiteral("use_hw_shader"), true).toBool();
 #endif
     Settings::values.shaders_accurate_mul =
-        ReadSetting(QStringLiteral("shaders_accurate_mul"), false).toBool();
+        ReadSetting(QStringLiteral("shaders_accurate_mul"), true).toBool();
     Settings::values.use_shader_jit = ReadSetting(QStringLiteral("use_shader_jit"), true).toBool();
     Settings::values.use_vsync_new = ReadSetting(QStringLiteral("use_vsync_new"), true).toBool();
     Settings::values.resolution_factor =
