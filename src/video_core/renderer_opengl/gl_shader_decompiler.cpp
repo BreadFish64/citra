@@ -199,7 +199,7 @@ public:
     void AddLine(std::string_view text) {
         DEBUG_ASSERT(scope >= 0);
         if (!text.empty()) {
-            shader_source.resize(shader_source.size() + static_cast<std::size_t>(scope) * 4, ' ');
+            shader_source.append(static_cast<std::size_t>(scope) * 4, ' ');
         }
         shader_source += text;
         shader_source += '\n';
