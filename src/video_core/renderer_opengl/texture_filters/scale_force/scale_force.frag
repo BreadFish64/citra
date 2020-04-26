@@ -1,7 +1,6 @@
 //? #version 320 es
 
 // from https://github.com/BreadFish64/ScaleFish/tree/master/scale_force
-// shader adapted to GLSL 320 es and debugging outputs stripped
 
 // MIT License
 //
@@ -37,8 +36,8 @@ vec2 tex_size;
 vec2 inv_tex_size;
 
 vec4 cubic(float v) {
-    vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v;
-    vec4 s = n * n * n;
+    vec3 n = vec3(1.0, 2.0, 3.0) - v;
+    vec3 s = n * n * n;
     float x = s.x;
     float y = s.y - 4.0 * s.x;
     float z = s.z - 4.0 * s.y + 6.0 * s.x;
@@ -51,7 +50,7 @@ vec4 textureBicubic(vec2 tex_coords) {
     tex_coords = tex_coords * tex_size - 0.5;
 
     vec2 fxy = fract(tex_coords);
-    tex_coords -= fxy;
+    tex_coords = floor(tex_coords);
 
     vec4 xcubic = cubic(fxy.x);
     vec4 ycubic = cubic(fxy.y);
@@ -74,70 +73,51 @@ vec4 textureBicubic(vec2 tex_coords) {
     return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
 }
 
-// Finds the distance between colors in YCbCr space,
-// with a higher priority given to tone rather than luminance.
-// Also handles the alpha channel
-float ColorDist(vec4 a, vec4 b) {
-    // https://en.wikipedia.org/wiki/YCbCr#ITU-R_BT.2020_conversion
-    const vec3 K = vec3(0.2627, 0.6780, 0.0593);
-    const float LUMINANCE_WEIGHT = .6;
-    const mat3 MATRIX = mat3(K * LUMINANCE_WEIGHT, -.5 * K.r / (1.0 - K.b), -.5 * K.g / (1.0 - K.b),
-                             .5, .5, -.5 * K.g / (1.0 - K.r), -.5 * K.b / (1.0 - K.r));
-    const float LENGTH_ADJUSTMENT = length(vec3(1.0)) / length(vec3(LUMINANCE_WEIGHT, 1.0, 1.0));
-    vec4 diff = abs(a - b);
-    vec2 alpha_product = vec2(a.a * b.a);
-    vec3 YCbCr = diff.rgb * MATRIX;
-    float d = dot(YCbCr, YCbCr) * (LENGTH_ADJUSTMENT * LENGTH_ADJUSTMENT);
-    return sqrt(dot(vec2(d + diff.a), alpha_product));
-}
-
-// Regular Bilinear interpolated texel at tex_coord.
-vec4 center_texel;
-
-// Calculates the effect of the surrounding texels on the final texel's coordinate.
-#define ColorDiff(x, y) {                                                                         \
-    const vec2 offset = vec2(x, y);                                                               \
-    const float weight = pow(length(offset), -length(offset));                                    \
-    vec4 texel = textureLodOffset(input_texture, tex_coord, 0.0, ivec2(x, y));                    \
-    total_offset += vec3(ColorDist(texel, center_texel) * weight) * vec3(offset, 1.0);            \
-}
-
 void main() {
-    center_texel = textureLod(input_texture, tex_coord, 0.0);
+    vec4 center_texel = textureLod(input_texture, tex_coord, 0.0);
     tex_size = vec2(textureSize(input_texture, 0));
     inv_tex_size = 1.0 / tex_size;
 
-    // x and y are the calculated location of the final texel.
-    // z is the sum of all the weighted color differences from surrounding pixels.
-    vec3 total_offset = vec3(0.0);
+    // https://en.wikipedia.org/wiki/YCbCr#ITU-R_BT.2020_conversion
+    const vec3 K = vec3(0.2627, 0.6780, 0.0593);
+    const float LUMINANCE_WEIGHT = .6;
+    const mat3 YCBCR_MATRIX =
+        mat3(K * LUMINANCE_WEIGHT, -.5 * K.r / (1.0 - K.b), -.5 * K.g / (1.0 - K.b), .5, .5,
+             -.5 * K.g / (1.0 - K.r), -.5 * K.b / (1.0 - K.r));
 
-    ColorDiff(-1, -2);
-    ColorDiff(0, -2);
-    ColorDiff(1, -2);
+    mat4x3 center = mat4x3(center_texel.rgb, center_texel.rgb, center_texel.rgb, center_texel.rgb);
+#define BODY(var, direction)                                                                       \
+    mat3x4 var;                                                                                    \
+    {                                                                                              \
+        const int up = direction;                                                                  \
+        vec4 A = textureLodOffset(input_texture, tex_coord, 0.0, ivec2(-up, up));                  \
+        vec4 B = textureLodOffset(input_texture, tex_coord, 0.0, ivec2(0, up));                    \
+        vec4 C = textureLodOffset(input_texture, tex_coord, 0.0, ivec2(up, up));                   \
+        vec4 D = textureLodOffset(input_texture, tex_coord, 0.0, ivec2(-up, 0));                   \
+                                                                                                   \
+        mat4x3 colors = mat4x3(A.rgb, B.rgb, C.rgb, D.rgb) - center;                               \
+                                                                                                   \
+        mat4x3 YCbCr = YCBCR_MATRIX * colors;                                                      \
+                                                                                                   \
+        vec4 color_dist = vec3(1.0) * YCbCr;                                                       \
+        color_dist *= color_dist;                                                                  \
+                                                                                                   \
+        vec4 alpha = vec4(A.a, B.a, C.a, D.a);                                                     \
+                                                                                                   \
+        vec4 real_dist =                                                                           \
+            sqrt((color_dist + abs(center_texel.aaaa - alpha)) * alpha * center_texel.aaaa);       \
+                                                                                                   \
+        var =                                                                                      \
+            matrixCompMult(mat3x4(real_dist, real_dist, real_dist),                                \
+                           mat3x4(vec4(-up, 0, up, -up), vec4(up, up, up, 0), vec4(1, 1, 1, 1)));  \
+    }
 
-    ColorDiff(-2, -1);
-    ColorDiff(-1, -1);
-    ColorDiff(0, -1);
-    ColorDiff(1, -1);
-    ColorDiff(2, -1);
+    BODY(offset_tl, 1);
+    BODY(offset_br, -1);
 
-    ColorDiff(-2, 0);
-    ColorDiff(-1, 0);
-    // center_tex
-    ColorDiff(1, 0);
-    ColorDiff(2, 0);
+    vec3 total_offset = vec4(1.0) * (offset_tl + offset_br);
 
-    ColorDiff(-2, 1);
-    ColorDiff(-1, 1);
-    ColorDiff(0, 1);
-    ColorDiff(1, 1);
-    ColorDiff(2, 1);
-
-    ColorDiff(-1, 2);
-    ColorDiff(0, 2);
-    ColorDiff(1, 2);
-
-    if(total_offset.z == 0.0){
+    if (total_offset.z == 0.0) {
         // Doing bicubic filtering just past the edges where the offset is 0 causes black floaters
         // and it doesn't really matter which filter is used when the colors aren't changing.
         frag_color = center_texel;
@@ -147,9 +127,8 @@ void main() {
         // and total_offset reaches into clear areas.
         // This works pretty well to keep the offset in bounds for these cases.
         float clamp_val = length(total_offset.xy) / total_offset.z;
-        vec2 final_offset = clamp(total_offset.xy, -clamp_val, clamp_val);
+        vec2 final_offset = clamp(total_offset.xy, -clamp_val, clamp_val) * inv_tex_size;
 
-        final_offset /= vec2(textureSize(input_texture, 0));
         frag_color = textureBicubic(tex_coord - final_offset);
     }
 }
