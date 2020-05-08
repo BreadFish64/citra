@@ -87,9 +87,9 @@ u32 GSP_GPU::GetUnusedThreadId() {
 }
 
 /// Gets a pointer to a thread command buffer in GSP shared memory
-static inline u8* GetCommandBuffer(std::shared_ptr<Kernel::SharedMemory> shared_memory,
-                                   u32 thread_id) {
-    return shared_memory->GetPointer(0x800 + (thread_id * sizeof(CommandBuffer)));
+static inline CommandBuffer& GetCommandBuffer(std::shared_ptr<Kernel::SharedMemory> shared_memory,
+                                              u32 thread_id) {
+    return reinterpret_cast<CommandBuffer*>(shared_memory->GetPointer(0x800))[thread_id];
 }
 
 FrameBufferUpdate* GSP_GPU::GetFrameBufferInfo(u32 thread_id, u32 screen_index) {
@@ -632,18 +632,17 @@ void GSP_GPU::SetLcdForceBlack(Kernel::HLERequestContext& ctx) {
 void GSP_GPU::TriggerCmdReqQueue(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0xC, 0, 0);
 
-    CommandBuffer* command_buffer =
-        (CommandBuffer*)GetCommandBuffer(shared_memory, active_thread_id);
+    CommandBuffer& command_buffer = GetCommandBuffer(shared_memory, active_thread_id);
 
     // Iterate through each command...
-    for (unsigned i = 0; i < command_buffer->number_commands; ++i) {
-        g_debugger.GXCommandProcessed((u8*)&command_buffer->commands[i]);
+    for (unsigned i = 0; i < command_buffer.number_commands; ++i) {
+        g_debugger.GXCommandProcessed(command_buffer.commands[i]);
 
         // Decode and execute command
-        ExecuteCommand(command_buffer->commands[i], active_thread_id);
+        ExecuteCommand(command_buffer.commands[i], active_thread_id);
 
         // Indicates that command has completed
-        command_buffer->number_commands.Assign(command_buffer->number_commands - 1);
+        command_buffer.number_commands.Assign(command_buffer.number_commands - 1);
     }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);

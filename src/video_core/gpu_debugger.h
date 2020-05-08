@@ -44,17 +44,14 @@ public:
         friend class GraphicsDebugger;
     };
 
-    void GXCommandProcessed(u8* command_data) {
+    void GXCommandProcessed(const Service::GSP::Command& command_data) {
         if (observers.empty())
             return;
 
-        gx_command_history.emplace_back();
-        Service::GSP::Command& cmd = gx_command_history.back();
-
-        memcpy(&cmd, command_data, sizeof(Service::GSP::Command));
+        gx_command_history.emplace_back(command_data);
 
         ForEachObserver([this](DebuggerObserver* observer) {
-            observer->GXCommandProcessed(static_cast<int>(this->gx_command_history.size()));
+            observer->GXCommandProcessed(static_cast<int>(gx_command_history.size()));
         });
     }
 
