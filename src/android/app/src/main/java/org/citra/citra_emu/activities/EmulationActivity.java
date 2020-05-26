@@ -392,7 +392,9 @@ public final class EmulationActivity extends AppCompatActivity {
                 break;
 
             case MENU_ACTION_LOAD_AMIIBO:
-                FileBrowserHelper.openFilePicker(this, REQUEST_SELECT_AMIIBO, R.string.select_amiibo, Collections.singletonList("bin"));
+                FileBrowserHelper.openFilePicker(this, REQUEST_SELECT_AMIIBO,
+                                                 R.string.select_amiibo,
+                                                 Collections.singletonList("bin"), false);
                 break;
 
             case MENU_ACTION_REMOVE_AMIIBO:

@@ -12,6 +12,7 @@ import org.citra.citra_emu.utils.AddDirectoryHelper;
 
 public final class MainPresenter {
     public static final int REQUEST_ADD_DIRECTORY = 1;
+    public static final int REQUEST_INSTALL_CIA = 2;
 
     private final MainView mView;
     private String mDirToAdd;
@@ -27,9 +28,9 @@ public final class MainPresenter {
         refeshGameList();
     }
 
-    public void launchFileListActivity() {
+    public void launchFileListActivity(int request) {
         if (mView != null) {
-            mView.launchFileListActivity();
+            mView.launchFileListActivity(request);
         }
     }
 
@@ -46,7 +47,11 @@ public final class MainPresenter {
                 return true;
 
             case R.id.button_add_directory:
-                launchFileListActivity();
+                launchFileListActivity(REQUEST_ADD_DIRECTORY);
+                return true;
+
+            case R.id.button_install_cia:
+                launchFileListActivity(REQUEST_INSTALL_CIA);
                 return true;
 
             case R.id.button_premium:

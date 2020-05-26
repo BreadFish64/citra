@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <iostream>
 #include <regex>
 #include <thread>
@@ -559,6 +560,30 @@ void Java_org_citra_citra_1emu_NativeLibrary_RemoveAmiibo(JNIEnv* env, jclass cl
     }
 
     nfc->RemoveAmiibo();
+}
+
+void Java_org_citra_citra_1emu_NativeLibrary_InstallCIAS(JNIEnv* env, [[maybe_unused]] jclass clazz,
+                                                         jobjectArray path) {
+    const jsize count{env->GetArrayLength(path)};
+    std::vector<std::string> paths;
+    for (jsize idx{0}; idx < count; ++idx) {
+        paths.emplace_back(
+            GetJString(env, static_cast<jstring>(env->GetObjectArrayElement(path, idx))));
+    }
+    std::atomic<jsize> idx{count};
+    std::vector<std::thread> threads;
+    std::generate_n(std::back_inserter(threads),
+                    std::min<jsize>(std::thread::hardware_concurrency(), count), [&] {
+                        return std::thread{[&idx, &paths, env] {
+                            jsize work_idx;
+                            while ((work_idx = --idx) >= 0) {
+                                LOG_INFO(Frontend, "Installing CIA {}", work_idx);
+                                Service::AM::InstallCIA(paths[work_idx]);
+                            }
+                        }};
+                    });
+    for (auto& thread : threads)
+        thread.join();
 }
 
 } // extern "C"

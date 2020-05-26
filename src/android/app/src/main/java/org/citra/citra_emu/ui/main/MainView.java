@@ -21,5 +21,5 @@ public interface MainView {
 
     void launchSettingsActivity(String menuTag);
 
-    void launchFileListActivity();
+    void launchFileListActivity(int request);
 }

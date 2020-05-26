@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
+import org.citra.citra_emu.NativeLibrary;
 import org.citra.citra_emu.R;
 import org.citra.citra_emu.activities.EmulationActivity;
 import org.citra.citra_emu.features.settings.ui.SettingsActivity;
@@ -27,6 +28,7 @@ import org.citra.citra_emu.utils.StartupHandler;
 import org.citra.citra_emu.utils.ThemeUtil;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 /**
  * The main Activity of the Lollipop style UI. Manages several PlatformGamesFragments, which
@@ -141,11 +143,24 @@ public final class MainActivity extends AppCompatActivity implements MainView {
     }
 
     @Override
-    public void launchFileListActivity() {
+    public void launchFileListActivity(int request) {
         if (PermissionsHandler.hasWriteAccess(this)) {
-            FileBrowserHelper.openDirectoryPicker(this, MainPresenter.REQUEST_ADD_DIRECTORY,
-                    R.string.select_game_folder, Arrays.asList("elf", "axf", "cci", "3ds", "cxi", "app", "3dsx", "cia",
-                            "rar", "zip", "7z", "torrent", "tar", "gz"));
+            switch (request) {
+                case MainPresenter.REQUEST_ADD_DIRECTORY:
+                    FileBrowserHelper.openDirectoryPicker(this,
+                                                      MainPresenter.REQUEST_ADD_DIRECTORY,
+                                                      R.string.select_game_folder,
+                                                      Arrays.asList("elf", "axf", "cci", "3ds",
+                                                                    "cxi", "app", "3dsx", "cia",
+                                                                    "rar", "zip", "7z", "torrent",
+                                                                    "tar", "gz"));
+                    break;
+                case MainPresenter.REQUEST_INSTALL_CIA:
+                    FileBrowserHelper.openFilePicker(this, MainPresenter.REQUEST_INSTALL_CIA,
+                                                     R.string.install_cia_title,
+                                                     Collections.singletonList("cia"), true);
+                    break;
+            }
         } else {
             PermissionsHandler.checkWritePermission(this);
         }
@@ -171,6 +186,12 @@ public final class MainActivity extends AppCompatActivity implements MainView {
                     mPresenter.onDirectorySelected(FileBrowserHelper.getSelectedDirectory(result));
                 }
                 break;
+                case MainPresenter.REQUEST_INSTALL_CIA:
+                    // If the user picked a file, as opposed to just backing out.
+                    if (resultCode == MainActivity.RESULT_OK) {
+                        NativeLibrary.InstallCIAS(FileBrowserHelper.getSelectedFiles(result));
+                    }
+                    break;
         }
     }
 
@@ -187,7 +208,7 @@ public final class MainActivity extends AppCompatActivity implements MainView {
 
                     // Immediately prompt user to select a game directory on first boot
                     if (mPresenter != null) {
-                        mPresenter.launchFileListActivity();
+                        mPresenter.launchFileListActivity(MainPresenter.REQUEST_ADD_DIRECTORY);
                     }
                 } else {
                     Toast.makeText(this, R.string.write_permission_needed, Toast.LENGTH_SHORT)

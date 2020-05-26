@@ -113,7 +113,6 @@
 
     <!-- Add Directory Screen-->
     <string name="select_game_folder">Select Game Folder</string>
-    <string name="add_directory_title">Add Folder to Library</string>
 
     <!-- Preferences Screen -->
     <string name="preferences_settings">Settings</string>
@@ -183,4 +182,5 @@
     <!-- Microphone -->
     <string name="microphone">Microphone</string>
     <string name="microphone_permission_needed">Citra needs to access your microphone to emulate the 3DS\'s microphone.\n\nAlternatively, you can also change \"Audio Input Device\" in Audio Settings.</string>
+    <string name="install_cia_title">Install CIA</string>
 </resources>

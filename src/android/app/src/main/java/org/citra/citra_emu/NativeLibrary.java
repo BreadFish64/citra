@@ -482,6 +482,8 @@ public final class NativeLibrary {
 
     public static native void RemoveAmiibo();
 
+    public static native void InstallCIAS(String[] path);
+
     /**
      * Button type for use in onTouchEvent
      */

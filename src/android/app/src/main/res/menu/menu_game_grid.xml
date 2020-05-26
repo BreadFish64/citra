@@ -8,10 +8,22 @@
         android:title="@string/premium_text"
         app:showAsAction="ifRoom" />
     <item
-        android:id="@+id/button_add_directory"
+        android:id="@+id/button_file_menu"
         android:icon="@drawable/ic_folder"
-        android:title="@string/add_directory_title"
-        app:showAsAction="ifRoom" />
+        android:title="@string/select_game_folder"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/button_add_directory"
+                android:icon="@drawable/ic_folder"
+                android:title="@string/select_game_folder"
+                app:showAsAction="ifRoom" />
+            <item
+                android:id="@+id/button_install_cia"
+                android:title="@string/install_cia_title"
+                app:showAsAction="ifRoom" />
+        </menu>
+    </item>
     <item
         android:id="@+id/menu_settings_core"
         android:icon="@drawable/ic_settings_core"
