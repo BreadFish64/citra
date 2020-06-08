@@ -1,0 +1,17 @@
+#version 450
+#include "../utils.comp"
+
+layout(binding = 0) writeonly buffer dst_buffer {
+    uint16_t colors[];
+};
+
+layout(binding = 1, rgba8ui) uniform readonly lowp uimage2D src_image;
+
+void main() {
+    u8vec4 rgba8 = u8vec4(imageLoad(src_image, GetImageCoord()));
+    rgba8.rg &= u8vec2(0xF8, 0xFC);
+    uint16_t output_data = rgba8.b >> 3;
+    output_data |= rgba8.g << 3;
+    output_data |= rgba8.r << 8;
+    colors[GetAddress()] = output_data;
+}

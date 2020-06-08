@@ -6,7 +6,9 @@
 
 #include <array>
 #include <climits>
+
 #include <boost/icl/interval.hpp>
+
 #include "common/assert.h"
 #include "common/math_util.h"
 #include "core/hw/gpu.h"
@@ -265,6 +267,41 @@ public:
     bool is_tiled = false;
     PixelFormat pixel_format = PixelFormat::Invalid;
     SurfaceType type = SurfaceType::Invalid;
+
+    static std::string_view SurfaceTypeAsString(SurfaceType type) {
+        switch (type) {
+        case SurfaceType::Color:
+            return "Color";
+        case SurfaceType::Texture:
+            return "Texture";
+        case SurfaceType::Depth:
+            return "Depth";
+        case SurfaceType::DepthStencil:
+            return "Depth/Stencil";
+        case SurfaceType::Fill:
+            return "Fill";
+        default:
+            return "Not a real surface type";
+        }
+    }
+
+    std::string PrintParams() {
+        return fmt::format(R"(
+Address:        {:08X}
+End Address:    {:08X}
+Size:           {}B
+
+Width:          {}
+Height:         {}
+Stride:         {}
+Scale:          {}x
+Tiled:          {}
+Pixel Format    {}
+Surface Type    {}
+)",
+                           addr, end, size, width, height, stride, res_scale, is_tiled,
+                           PixelFormatAsString(pixel_format), SurfaceTypeAsString(type));
+    }
 };
 
 } // namespace OpenGL

@@ -21,13 +21,15 @@
 #include "video_core/regs_lighting.h"
 #include "video_core/regs_rasterizer.h"
 #include "video_core/regs_texturing.h"
-#include "video_core/renderer_opengl/gl_rasterizer_cache.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_shader_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_opengl/gl_stream_buffer.h"
 #include "video_core/renderer_opengl/pica_to_gl.h"
 #include "video_core/shader/shader.h"
+
+#include "video_core/renderer_vulkan/vk_rasterizer_cache.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 
 namespace Frontend {
 class EmuWindow;
@@ -267,8 +269,6 @@ private:
     OpenGLState state;
     GLuint default_texture;
 
-    RasterizerCacheOpenGL res_cache;
-
     std::vector<HardwareVertex> vertex_batch;
 
     bool shader_dirty = true;
@@ -322,6 +322,10 @@ private:
     std::array<GLvec4, 256> proctex_diff_lut_data{};
 
     bool allow_shadow;
+
+
+    std::unique_ptr<Vulkan::Instance> vk_inst;
+    std::unique_ptr<Vulkan::RasterizerCacheVulkan> res_cache;
 };
 
 } // namespace OpenGL

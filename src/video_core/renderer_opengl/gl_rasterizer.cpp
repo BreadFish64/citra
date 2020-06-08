@@ -176,6 +176,9 @@ RasterizerOpenGL::RasterizerOpenGL()
     glEnable(GL_BLEND);
 
     SyncEntireState();
+
+    vk_inst = std::make_unique<Vulkan::Instance>();
+    res_cache = std::make_unique<Vulkan::RasterizerCacheVulkan>(*vk_inst);
 }
 
 RasterizerOpenGL::~RasterizerOpenGL() = default;
@@ -289,7 +292,7 @@ RasterizerOpenGL::VertexArrayInfo RasterizerOpenGL::AnalyzeVertexArray(bool is_i
         vertex_min = 0xFFFF;
         vertex_max = 0;
         const u32 size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
-        res_cache.FlushRegion(address, size, nullptr);
+        res_cache->FlushRegion(address, size, nullptr);
         for (u32 index = 0; index < regs.pipeline.num_vertices; ++index) {
             const u32 vertex = index_u16 ? index_address_16[index] : index_address_8[index];
             vertex_min = std::min(vertex_min, vertex);
@@ -362,7 +365,7 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
         u32 vertex_num = vs_input_index_max - vs_input_index_min + 1;
         u32 data_size = loader.byte_count * vertex_num;
 
-        res_cache.FlushRegion(data_addr, data_size, nullptr);
+        res_cache->FlushRegion(data_addr, data_size, nullptr);
         std::memcpy(array_ptr, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
 
         array_ptr += data_size;
@@ -537,11 +540,11 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         regs.rasterizer.viewport_corner.y // bottom
     };
 
-    Surface color_surface;
-    Surface depth_surface;
+    Vulkan::Surface color_surface;
+    Vulkan::Surface depth_surface;
     Common::Rectangle<u32> surfaces_rect;
     std::tie(color_surface, depth_surface, surfaces_rect) =
-        res_cache.GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
+        res_cache->GetFramebufferSurfaces(using_color_fb, using_depth_fb, viewport_rect_unscaled);
 
     const u16 res_scale = color_surface != nullptr
                               ? color_surface->res_scale
@@ -645,6 +648,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         }
     };
 
+    std::array<Vulkan::Surface, 3> texture_surface;
     // Sync and bind the texture surfaces
     const auto pica_textures = regs.texturing.GetTextures();
     for (unsigned texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
@@ -658,9 +662,10 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                     if (!allow_shadow)
                         continue;
 
-                    Surface surface = res_cache.GetTextureSurface(texture);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_px = surface->texture.handle);
+                    texture_surface[texture_index] = res_cache->GetTextureSurface(texture);
+                    if (texture_surface[texture_index] != nullptr) {
+                        CheckBarrier(state.image_shadow_texture_px =
+                                         texture_surface[texture_index]->texture.handle);
                     } else {
                         state.image_shadow_texture_px = 0;
                     }
@@ -671,59 +676,64 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                         continue;
                     Pica::Texture::TextureInfo info = Pica::Texture::TextureInfo::FromPicaRegister(
                         texture.config, texture.format);
-                    Surface surface;
 
                     using CubeFace = Pica::TexturingRegs::CubeFace;
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_px = surface->texture.handle);
+                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
+                    if (texture_surface[texture_index] != nullptr) {
+                        CheckBarrier(state.image_shadow_texture_px =
+                                         texture_surface[texture_index]->texture.handle);
                     } else {
                         state.image_shadow_texture_px = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_nx = surface->texture.handle);
+                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
+                    if (texture_surface[texture_index] != nullptr) {
+                        CheckBarrier(state.image_shadow_texture_nx =
+                                         texture_surface[texture_index]->texture.handle);
                     } else {
                         state.image_shadow_texture_nx = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_py = surface->texture.handle);
+                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
+                    if (texture_surface[texture_index] != nullptr) {
+                        CheckBarrier(state.image_shadow_texture_py =
+                                         texture_surface[texture_index]->texture.handle);
                     } else {
                         state.image_shadow_texture_py = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_ny = surface->texture.handle);
+                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
+                    if (texture_surface[texture_index] != nullptr) {
+                        CheckBarrier(state.image_shadow_texture_ny =
+                                         texture_surface[texture_index]->texture.handle);
                     } else {
                         state.image_shadow_texture_ny = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_pz = surface->texture.handle);
+                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
+                    if (texture_surface[texture_index] != nullptr) {
+                        CheckBarrier(state.image_shadow_texture_pz =
+                                         texture_surface[texture_index]->texture.handle);
                     } else {
                         state.image_shadow_texture_pz = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ);
-                    surface = res_cache.GetTextureSurface(info);
-                    if (surface != nullptr) {
-                        CheckBarrier(state.image_shadow_texture_nz = surface->texture.handle);
+                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
+                    if (texture_surface[texture_index] != nullptr) {
+                        CheckBarrier(state.image_shadow_texture_nz =
+                                         texture_surface[texture_index]->texture.handle);
                     } else {
                         state.image_shadow_texture_nz = 0;
                     }
@@ -732,7 +742,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                 }
                 case TextureType::TextureCube:
                     using CubeFace = Pica::TexturingRegs::CubeFace;
-                    TextureCubeConfig config;
+                    Vulkan::TextureCubeConfig config;
                     config.px = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX);
                     config.nx = regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX);
                     config.py = regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY);
@@ -742,7 +752,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                     config.width = texture.config.width;
                     config.format = texture.format;
                     state.texture_cube_unit.texture_cube =
-                        res_cache.GetTextureCube(config).texture.handle;
+                        res_cache->GetTextureCube(config).texture.handle;
 
                     texture_cube_sampler.SyncWithConfig(texture.config);
                     state.texture_units[texture_index].texture_2d = 0;
@@ -752,10 +762,10 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
             }
 
             texture_samplers[texture_index].SyncWithConfig(texture.config);
-            Surface surface = res_cache.GetTextureSurface(texture);
-            if (surface != nullptr) {
+            texture_surface[texture_index] = res_cache->GetTextureSurface(texture);
+            if (texture_surface[texture_index] != nullptr) {
                 CheckBarrier(state.texture_units[texture_index].texture_2d =
-                                 surface->texture.handle);
+                                 texture_surface[texture_index]->texture.handle);
             } else {
                 // Can occur when texture addr is null or its memory is unmapped/invalid
                 // HACK: In this case, the correct behaviour for the PICA is to use the last
@@ -889,12 +899,12 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
 
     if (color_surface != nullptr && write_color_fb) {
         auto interval = color_surface->GetSubRectInterval(draw_rect_unscaled);
-        res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
+        res_cache->InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
                                    color_surface);
     }
     if (depth_surface != nullptr && write_depth_fb) {
         auto interval = depth_surface->GetSubRectInterval(draw_rect_unscaled);
-        res_cache.InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
+        res_cache->InvalidateRegion(boost::icl::first(interval), boost::icl::length(interval),
                                    depth_surface);
     }
 
@@ -1393,27 +1403,27 @@ void RasterizerOpenGL::NotifyPicaRegisterChanged(u32 id) {
 
 void RasterizerOpenGL::FlushAll() {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
-    res_cache.FlushAll();
+    res_cache->FlushAll();
 }
 
 void RasterizerOpenGL::FlushRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
-    res_cache.FlushRegion(addr, size);
+    res_cache->FlushRegion(addr, size);
 }
 
 void RasterizerOpenGL::InvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
-    res_cache.InvalidateRegion(addr, size, nullptr);
+    res_cache->InvalidateRegion(addr, size, nullptr);
 }
 
 void RasterizerOpenGL::FlushAndInvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
-    res_cache.FlushRegion(addr, size);
-    res_cache.InvalidateRegion(addr, size, nullptr);
+    res_cache->FlushRegion(addr, size);
+    res_cache->InvalidateRegion(addr, size, nullptr);
 }
 
 void RasterizerOpenGL::ClearAll(bool flush) {
-    res_cache.ClearAll(flush);
+    res_cache->ClearAll(flush);
 }
 
 bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {
@@ -1439,18 +1449,18 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
     dst_params.UpdateParams();
 
     Common::Rectangle<u32> src_rect;
-    Surface src_surface;
+    Vulkan::Surface src_surface;
     std::tie(src_surface, src_rect) =
-        res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
+        res_cache->GetSurfaceSubRect(src_params, Vulkan::ScaleMatch::Ignore, true);
     if (src_surface == nullptr)
         return false;
 
     dst_params.res_scale = src_surface->res_scale;
 
     Common::Rectangle<u32> dst_rect;
-    Surface dst_surface;
+    Vulkan::Surface dst_surface;
     std::tie(dst_surface, dst_rect) =
-        res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, false);
+        res_cache->GetSurfaceSubRect(dst_params, Vulkan::ScaleMatch::Upscale, false);
     if (dst_surface == nullptr)
         return false;
 
@@ -1460,10 +1470,10 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
     if (config.flip_vertically)
         std::swap(src_rect.top, src_rect.bottom);
 
-    if (!res_cache.BlitSurfaces(src_surface, src_rect, dst_surface, dst_rect))
+    if (!res_cache->BlitSurfaces(src_surface, src_rect, dst_surface, dst_rect))
         return false;
 
-    res_cache.InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
+    res_cache->InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
     return true;
 }
 
@@ -1508,8 +1518,8 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     src_params.end = src_params.addr + src_params.size;
 
     Common::Rectangle<u32> src_rect;
-    Surface src_surface;
-    std::tie(src_surface, src_rect) = res_cache.GetTexCopySurface(src_params);
+    Vulkan::Surface src_surface;
+    std::tie(src_surface, src_rect) = res_cache->GetTexCopySurface(src_params);
     if (src_surface == nullptr) {
         return false;
     }
@@ -1533,9 +1543,9 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     // Since we are going to invalidate the gap if there is one, we will have to load it first
     const bool load_gap = output_gap != 0;
     Common::Rectangle<u32> dst_rect;
-    Surface dst_surface;
+    Vulkan::Surface dst_surface;
     std::tie(dst_surface, dst_rect) =
-        res_cache.GetSurfaceSubRect(dst_params, ScaleMatch::Upscale, load_gap);
+        res_cache->GetSurfaceSubRect(dst_params, Vulkan::ScaleMatch::Upscale, load_gap);
     if (dst_surface == nullptr) {
         return false;
     }
@@ -1544,20 +1554,20 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
         return false;
     }
 
-    if (!res_cache.BlitSurfaces(src_surface, src_rect, dst_surface, dst_rect)) {
+    if (!res_cache->BlitSurfaces(src_surface, src_rect, dst_surface, dst_rect)) {
         return false;
     }
 
-    res_cache.InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
+    res_cache->InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
     return true;
 }
 
 bool RasterizerOpenGL::AccelerateFill(const GPU::Regs::MemoryFillConfig& config) {
-    Surface dst_surface = res_cache.GetFillSurface(config);
+    Vulkan::Surface dst_surface = res_cache->GetFillSurface(config);
     if (dst_surface == nullptr)
         return false;
 
-    res_cache.InvalidateRegion(dst_surface->addr, dst_surface->size, dst_surface);
+    res_cache->InvalidateRegion(dst_surface->addr, dst_surface->size, dst_surface);
     return true;
 }
 
@@ -1579,9 +1589,9 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
     src_params.UpdateParams();
 
     Common::Rectangle<u32> src_rect;
-    Surface src_surface;
+    Vulkan::Surface src_surface;
     std::tie(src_surface, src_rect) =
-        res_cache.GetSurfaceSubRect(src_params, ScaleMatch::Ignore, true);
+        res_cache->GetSurfaceSubRect(src_params, Vulkan::ScaleMatch::Ignore, true);
 
     if (src_surface == nullptr) {
         return false;
@@ -1595,6 +1605,7 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
     screen_info.display_texture = src_surface->texture.handle;
+    screen_info.keep_alive = src_surface;
 
     return true;
 }

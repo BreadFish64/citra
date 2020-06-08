@@ -14,6 +14,8 @@
 #include "video_core/renderer_opengl/gl_resource_manager.h"
 #include "video_core/renderer_opengl/gl_state.h"
 
+#include "video_core/renderer_vulkan/vk_rasterizer_cache.h"
+
 namespace Layout {
 struct FramebufferLayout;
 }
@@ -47,6 +49,7 @@ struct TextureInfo {
 /// Structure used for storing information about the display target for each 3DS screen
 struct ScreenInfo {
     GLuint display_texture;
+    Vulkan::Surface keep_alive;
     Common::Rectangle<float> display_texcoords;
     TextureInfo texture;
 };

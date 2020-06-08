@@ -1,0 +1,19 @@
+#version 450
+#define tile_size uvec3(4, 8, 1)
+#include "../utils.comp"
+
+layout(binding = 0) writeonly buffer dst_buffer {
+    uint8_t colors[];
+};
+
+layout(binding = 1, r8ui) uniform readonly lowp uimage2D src_image;
+
+void main() {
+    ivec2 coord = GetImageCoord();
+    coord.x *= 2;
+    uint8_t r1 = uint8_t(imageLoad(src_image, coord).r);
+    coord.x += 1;
+    r1 &= uint8_t(0xF0);
+    uint8_t r2 = uint8_t(imageLoad(src_image, coord).r);
+    colors[GetAddress()] = r1 | (r2 >> 4);
+}

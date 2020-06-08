@@ -584,11 +584,11 @@ void CachedSurface::LoadGLBuffer(PAddr load_start, PAddr load_end) {
     }
 
     // TODO: Should probably be done in ::Memory:: and check for other regions too
-    if (load_start < Memory::VRAM_VADDR_END && load_end > Memory::VRAM_VADDR_END)
-        load_end = Memory::VRAM_VADDR_END;
+    if (load_start < Memory::VRAM_PADDR_END && load_end > Memory::VRAM_PADDR_END)
+        load_end = Memory::VRAM_PADDR_END;
 
-    if (load_start < Memory::VRAM_VADDR && load_end > Memory::VRAM_VADDR)
-        load_start = Memory::VRAM_VADDR;
+    if (load_start < Memory::VRAM_PADDR && load_end > Memory::VRAM_PADDR)
+        load_start = Memory::VRAM_PADDR;
 
     MICROPROFILE_SCOPE(OpenGL_SurfaceLoad);
 

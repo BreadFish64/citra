@@ -561,6 +561,7 @@ void RendererOpenGL::LoadFBToScreenInfo(const GPU::Regs::FramebufferConfig& fram
                                          static_cast<u32>(pixel_stride), screen_info)) {
         // Reset the screen info's display texture to its own permanent texture
         screen_info.display_texture = screen_info.texture.resource.handle;
+        screen_info.keep_alive = nullptr;
         screen_info.display_texcoords = Common::Rectangle<float>(0.f, 0.f, 1.f, 1.f);
 
         Memory::RasterizerFlushRegion(framebuffer_addr, framebuffer.stride * framebuffer.height);
@@ -1184,6 +1185,7 @@ VideoCore::ResultStatus RendererOpenGL::Init() {
 
     if (GLAD_GL_KHR_debug) {
         glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(DebugHandler, nullptr);
     }
 

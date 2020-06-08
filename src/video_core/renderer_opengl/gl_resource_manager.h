@@ -65,6 +65,31 @@ public:
     GLuint handle = 0;
 };
 
+class OGLMemoryObject : private NonCopyable {
+public:
+    OGLMemoryObject() = default;
+
+    OGLMemoryObject(OGLMemoryObject&& o) noexcept : handle(std::exchange(o.handle, 0)) {}
+
+    ~OGLMemoryObject() {
+        Release();
+    }
+
+    OGLMemoryObject& operator=(OGLMemoryObject&& o) noexcept {
+        Release();
+        handle = std::exchange(o.handle, 0);
+        return *this;
+    }
+
+    /// Creates a new internal OpenGL resource and stores the handle
+    void Create();
+
+    /// Deletes the internal OpenGL resource
+    void Release();
+
+    GLuint handle = 0;
+};
+
 class OGLSampler : private NonCopyable {
 public:
     OGLSampler() = default;

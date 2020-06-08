@@ -68,6 +68,18 @@ add_library(video_core STATIC
     #temporary, move these back in alphabetical order before merging
     renderer_opengl/gl_format_reinterpreter.cpp
     renderer_opengl/gl_format_reinterpreter.h
+
+    renderer_vulkan/vk_instance.h
+    renderer_vulkan/vk_rasterizer_cache.cpp
+    renderer_vulkan/vk_rasterizer_cache.h
+    renderer_vulkan/vk_buffer_to_image.cpp
+    renderer_vulkan/vk_buffer_to_image.h
+    renderer_vulkan/vk_image_to_buffer.cpp
+    renderer_vulkan/vk_image_to_buffer.h
+    renderer_vulkan/conversion_shaders/buffer_to_image_conversions.h
+    renderer_vulkan/conversion_shaders/image_to_buffer_conversions.h
+    renderer_vulkan/conversion_shaders/utils.comp
+
     shader/debug_data.h
     shader/shader.cpp
     shader/shader.h
@@ -147,3 +159,73 @@ target_link_libraries(video_core PRIVATE glad nihstro-headers Boost::serializati
 if (ARCHITECTURE_x86_64)
     target_link_libraries(video_core PUBLIC xbyak)
 endif()
+
+find_package(Vulkan REQUIRED)
+target_link_libraries(video_core PRIVATE Vulkan::Vulkan)
+target_include_directories(video_core PRIVATE Vulkan::Vulkan)
+
+set(buffer_to_image_shaders
+    rgba8_to_rgba8
+    rgb8_to_rgba8
+    rgb5a1_to_rgba8
+    rgb565_to_rgba8
+    rgba4_to_rgba8
+    ia8_to_rg8
+    rg8_to_rg8
+    i8_to_r8
+    a8_to_r8
+    ia4_to_rg8
+    i4_to_r8
+    a4_to_r8
+)
+
+set(image_to_buffer_shaders
+    rgba8_to_rgba8
+    rgba8_to_rgb8
+    rgba8_to_rgb5a1
+    rgba8_to_rgb565
+    rgba8_to_rgba4
+    rg8_to_ia8
+    rg8_to_rg8
+    r8_to_i8
+    r8_to_a8
+    rg8_to_ia4
+    r8_to_i4
+    r8_to_a4
+)
+
+function(CompileShader shader_name dir)
+string(REPLACE "." "_" shader_name ${shader})
+set(shader_path ${CMAKE_CURRENT_SOURCE_DIR}/renderer_vulkan/conversion_shaders/${dir}/${shader}.comp)
+set(shader_header ${CMAKE_CURRENT_SOURCE_DIR}/renderer_vulkan/conversion_shaders/${dir}/spirv/${shader_name}.h)
+add_custom_command(
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    MAIN_DEPENDENCY ${shader_path}
+    OUTPUT ${shader_header}
+    COMMAND glslc
+        ${shader_path}
+        -o ${shader_header}
+        --target-spv=spv1.3
+        --target-env=vulkan1.1
+        -O
+        -mfmt=c
+)
+set_source_files_properties(${shader_header} PROPERTIES GENERATED TRUE)
+target_sources(video_core PRIVATE ${shader_path})
+target_sources(video_core PRIVATE ${shader_header})
+endfunction()
+
+foreach(shader ${buffer_to_image_shaders})
+    CompileShader(shader buffer_to_image)
+endforeach()
+
+foreach(shader ${image_to_buffer_shaders})
+    CompileShader(shader image_to_buffer)
+endforeach()
+
+add_executable(conversion_test
+    renderer_vulkan/conversion_test/main.cpp
+)
+
+target_link_libraries(conversion_test PRIVATE video_core Vulkan::Vulkan lodepng glad)
+target_include_directories(conversion_test PRIVATE Vulkan::Vulkan)

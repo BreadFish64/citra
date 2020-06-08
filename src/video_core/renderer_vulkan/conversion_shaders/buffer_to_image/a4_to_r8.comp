@@ -1,0 +1,22 @@
+#version 450
+#include "../utils.comp"
+
+layout(binding = 0) readonly buffer src_buffer {
+    uint8_t colors[];
+};
+
+layout(binding = 1, r8ui) uniform writeonly lowp uimage2D dst_image;
+
+void main() {
+    uint32_t addr = GetAddress();
+    uint8_t input_data = colors[addr];
+    uint8_t output_data;
+    if ((addr & 0x00000001) == 0) {
+        uint8_t data = input_data & int8_t(0x0F);
+        output_data = data | (data << 4);
+    } else {
+        uint8_t data = input_data & int8_t(0xF0);
+        output_data = data | (data >> 4);
+    }
+    imageStore(dst_image, GetImageCoord(), uvec4(output_data, 0, 0, 0));
+}

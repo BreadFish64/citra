@@ -1,0 +1,15 @@
+#version 450
+#include "../utils.comp"
+
+layout(binding = 0) writeonly buffer dst_buffer {
+    uint8_t colors[];
+};
+
+layout(binding = 1, rg8ui) uniform readonly lowp uimage2D src_image;
+
+void main() {
+    u8vec2 rg8 = u8vec2(imageLoad(src_image, GetImageCoord()).rg);
+    uint8_t ia4 = rg8.r & uint8_t(0xF0);
+    ia4 |= rg8.g >> 4;
+    colors[GetAddress()] = ia4;
+}

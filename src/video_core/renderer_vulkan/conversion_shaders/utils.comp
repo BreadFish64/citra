@@ -1,0 +1,40 @@
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
+#extension GL_EXT_control_flow_attributes : enable
+
+#ifndef tile_size
+#define tile_size uvec3(8, 8, 1)
+#endif
+layout(local_size_x = tile_size.x, local_size_y = tile_size.y, local_size_z = tile_size.z) in;
+
+
+layout(push_constant) uniform Block {
+    uint32_t stride;
+    bool tiled;
+};
+
+uint8_t MortonInterleave(u8vec2 pos) {
+    uint8_t x3 = pos.x & uint8_t(0x01);
+    uint8_t y3 = pos.y & uint8_t(0x01);
+    uint8_t x2 = (pos.x >> 1) & uint8_t(0x01);
+    uint8_t y2 = (pos.y >> 1) & uint8_t(0x01);
+    uint8_t x1 = (pos.x >> 2) & uint8_t(0x01);
+    uint8_t y1 = (pos.y >> 2) & uint8_t(0x01);
+    uint8_t p = (y1 << 5) | (x1 << 4) | (y2 << 3) | (x2 << 2) | (y3 << 1) | (x3 << 0);
+    return p;
+}
+
+uint32_t GetAddress() {
+    if (tiled) {
+        uint32_t tile_addr = (gl_WorkGroupID.y * (stride / gl_WorkGroupSize.x) + gl_WorkGroupID.x) << 6;
+        u8vec2 morton_coord = u8vec2(gl_LocalInvocationID.x, 7 - gl_LocalInvocationID.y)
+        uint8_t morton = MortonInterleave(morton_coord);
+        return tile_addr | uint32_t(morton);
+    }
+    return uint32_t(gl_GlobalInvocationID.y) * stride + uint32_t(gl_GlobalInvocationID.x);
+}
+
+ivec2 GetImageCoord() {
+    return ivec2(gl_GlobalInvocationID.xy);
+}

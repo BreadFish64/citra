@@ -211,7 +211,7 @@ void Y2R_U::SetTransferEndInterrupt(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
 
-    LOG_WARNING(Service_Y2R, "(STUBBED) called");
+    //LOG_WARNING(Service_Y2R, "(STUBBED) called");
 }
 
 void Y2R_U::GetTransferEndInterrupt(Kernel::HLERequestContext& ctx) {
