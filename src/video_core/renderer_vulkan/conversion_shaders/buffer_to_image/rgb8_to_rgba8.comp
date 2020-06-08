@@ -2,12 +2,13 @@
 #include "../utils.comp"
 
 layout(binding = 0) readonly buffer src_buffer {
-    u8vec3 colors[];
+    uint8_t colors[];
 };
 
 layout(binding = 1, rgba8ui) uniform writeonly lowp uimage2D dst_image;
 
 void main() {
-    u8vec3 input_data = colors[GetAddress()];
+    uint32_t addr = GetAddress() * 3;
+    u8vec3 input_data = u8vec3(colors[addr+2], colors[addr+1], colors[addr]);
     imageStore(dst_image, GetImageCoord(), uvec4(input_data, ~0u));
 }

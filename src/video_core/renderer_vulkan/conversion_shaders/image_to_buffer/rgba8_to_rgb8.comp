@@ -1,13 +1,16 @@
 #version 450
 #include "../utils.comp"
 
-layout(binding = 0) writeonly buffer src_buffer {
-    u8vec3 colors[];
+layout(std430, binding = 0) writeonly buffer src_buffer {
+    uint8_t colors[];
 };
 
 layout(binding = 1, rgba8ui) uniform readonly lowp uimage2D dst_image;
 
 void main() {
+    uint32_t addr = GetAddress() * 3;
     u8vec4 rgbx = u8vec4(imageLoad(dst_image, GetImageCoord()));
-    colors[GetAddress()] = rgbx.rgb;
+    colors[addr] = rgbx.b;
+    colors[addr + 1] = rgbx.g;
+    colors[addr + 2] = rgbx.r;
 }

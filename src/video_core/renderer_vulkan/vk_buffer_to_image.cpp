@@ -195,6 +195,7 @@ void BufferToImageConverter::ImageFromBuffer(vk::Buffer buffer, vk::Image image,
         command_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline.second);
         struct {
             u32 stride{};
+            u8 pad[3]{};
             bool tiled{};
         } push_values{stride, tiled};
         command_buffer->pushConstants(*conversion_pipeline_layout,

@@ -8,10 +8,10 @@ layout(binding = 0) writeonly buffer dst_buffer {
 layout(binding = 1, rgba8ui) uniform readonly lowp uimage2D src_image;
 
 void main() {
-    u8vec4 rgba8 = u8vec4(imageLoad(src_image, GetImageCoord()));
-    rgba8.rg &= u8vec2(0xF8, 0xFC);
-    uint16_t output_data = rgba8.b >> 3;
-    output_data |= rgba8.g << 3;
-    output_data |= rgba8.r << 8;
+    u16vec3 rgb8 = u16vec3(imageLoad(src_image, GetImageCoord()).rgb);
+    rgb8.rg &= u8vec2(0xF8, 0xFC);
+    uint16_t output_data = rgb8.r << 8;
+    output_data |= rgb8.g << 3;
+    output_data |= rgb8.b >> 3;
     colors[GetAddress()] = output_data;
 }

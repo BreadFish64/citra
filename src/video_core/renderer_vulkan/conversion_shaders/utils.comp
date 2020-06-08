@@ -8,7 +8,6 @@
 #endif
 layout(local_size_x = tile_size.x, local_size_y = tile_size.y, local_size_z = tile_size.z) in;
 
-
 layout(push_constant) uniform Block {
     uint32_t stride;
     bool tiled;
@@ -27,14 +26,17 @@ uint8_t MortonInterleave(u8vec2 pos) {
 
 uint32_t GetAddress() {
     if (tiled) {
-        uint32_t tile_addr = (gl_WorkGroupID.y * (stride / gl_WorkGroupSize.x) + gl_WorkGroupID.x) << 6;
-        u8vec2 morton_coord = u8vec2(gl_LocalInvocationID.x, 7 - gl_LocalInvocationID.y)
-        uint8_t morton = MortonInterleave(morton_coord);
-        return tile_addr | uint32_t(morton);
+        uint32_t address = ((gl_WorkGroupID.y * stride) + gl_WorkGroupID.x * 8) * 8;
+        uint8_t morton = MortonInterleave(u8vec2(gl_LocalInvocationID.xy));
+        return address | morton;
     }
     return uint32_t(gl_GlobalInvocationID.y) * stride + uint32_t(gl_GlobalInvocationID.x);
 }
 
 ivec2 GetImageCoord() {
+    if (tiled) {
+        uint ymax = gl_NumWorkGroups.y * gl_WorkGroupSize.y - 1;
+        return ivec2(gl_GlobalInvocationID.x, ymax - gl_GlobalInvocationID.y);
+    }
     return ivec2(gl_GlobalInvocationID.xy);
 }

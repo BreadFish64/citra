@@ -202,6 +202,7 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     MAIN_DEPENDENCY ${shader_path}
     OUTPUT ${shader_header}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/renderer_vulkan/conversion_shaders/utils.comp
     COMMAND glslc
         ${shader_path}
         -o ${shader_header}
