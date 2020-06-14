@@ -28,7 +28,7 @@ RasterizerCacheVulkan::RasterizerCacheVulkan(Instance& vk_inst) : vk_inst{vk_ins
         allocation_info.allocationSize = memory_requirements.size;
         allocation_info.memoryTypeIndex = vk_inst.getMemoryType(
             memory_requirements.memoryTypeBits,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCached);
+            vk::MemoryPropertyFlagBits::eHostVisible);
 
         region.gpu_memory = vk_inst.device->allocateMemoryUnique(allocation_info);
         vk_inst.device->bindBufferMemory(*region.buffer, *region.gpu_memory, 0);
@@ -400,8 +400,10 @@ CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, const SurfaceParams& 
             swizzle_mask = {GL_ZERO, GL_ZERO, GL_ZERO, GL_RED};
             break;
         default:
+            swizzle_mask = {GL_RED, GL_GREEN, GL_BLUE, GL_ALPHA};
             break;
         }
+        glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle_mask.data());
         cur_state.Apply();
     }
     auto [region, offset] = owner.GetBufferOffset(addr);
@@ -436,7 +438,7 @@ CachedSurface::CachedSurface(RasterizerCacheVulkan& owner,
 }
 
 CachedSurface::~CachedSurface() {
-    if (type == SurfaceType::Fill)
+    if (type == SurfaceType::Fill || type == SurfaceType::Texture)
         return;
     auto [region, offset] = owner.GetBufferOffset(addr);
     owner.image_to_buffer->BufferFromImage(*region.buffer, *image, pixel_format, offset, width,

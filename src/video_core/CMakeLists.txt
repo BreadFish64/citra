@@ -79,6 +79,7 @@ add_library(video_core STATIC
     renderer_vulkan/conversion_shaders/buffer_to_image_conversions.h
     renderer_vulkan/conversion_shaders/image_to_buffer_conversions.h
     renderer_vulkan/conversion_shaders/utils.comp
+    renderer_vulkan/conversion_shaders/etc_utils.comp
 
     shader/debug_data.h
     shader/shader.cpp
@@ -177,6 +178,8 @@ set(buffer_to_image_shaders
     ia4_to_rg8
     i4_to_r8
     a4_to_r8
+    etc1_to_rgba8
+    etc1a4_to_rgba8
 )
 
 set(image_to_buffer_shaders

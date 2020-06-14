@@ -21,7 +21,7 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL
 VulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                     VkDebugUtilsMessageTypeFlagsEXT messageType,
                     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void*) {
-    Log::Level log_level;
+    Log::Level log_level{};
     switch (static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(messageSeverity)) {
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
@@ -108,11 +108,27 @@ struct Instance {
                      VK_VERSION_MAJOR(physical_device.getProperties().apiVersion),
                      VK_VERSION_MINOR(physical_device.getProperties().apiVersion),
                      VK_VERSION_PATCH(physical_device.getProperties().apiVersion));
-            for (auto format : {vk::Format::eR8G8B8Unorm, vk::Format::eR4G4B4A4UnormPack16}) {
+            for (auto format : {
+                     vk::Format::eR8G8B8A8Unorm,
+                     vk::Format::eB8G8R8A8Unorm,
+                     vk::Format::eR8G8B8Unorm,
+                     vk::Format::eB8G8R8Unorm,
+                     vk::Format::eR5G5B5A1UnormPack16,
+                     vk::Format::eR5G6B5UnormPack16,
+                     vk::Format::eR4G4B4A4UnormPack16,
+                     vk::Format::eR8G8Unorm,
+                     vk::Format::eR8Unorm,
+                     vk::Format::eR4G4UnormPack8,
+                     vk::Format::eEtc2R8G8B8UnormBlock,
+                     vk::Format::eEtc2R8G8B8A8UnormBlock,
+                     vk::Format::eD16Unorm,
+                     vk::Format::eD24UnormS8Uint,
+                     vk::Format::eX8D24UnormPack32,
+                }) {
                 auto format_properties = physical_device.getFormatProperties(format);
-                LOG_INFO(Render_OpenGL, "{} linear: {:x}, tiling: {:x}", vk::to_string(format),
-                         (u32)format_properties.linearTilingFeatures,
-                         (u32)format_properties.optimalTilingFeatures);
+                LOG_INFO(Render_OpenGL, "{} linear: {}, tiling: {}", vk::to_string(format),
+                         vk::to_string(format_properties.linearTilingFeatures),
+                         vk::to_string(format_properties.optimalTilingFeatures));
             }
         }
         u32 queue_family_index{0};

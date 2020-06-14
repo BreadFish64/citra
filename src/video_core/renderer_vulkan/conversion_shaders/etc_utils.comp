@@ -1,0 +1,61 @@
+//? #version 450
+#include "utils.comp"
+
+struct SubTile {
+    uint16_t table_subindexes;
+    uint16_t negation_flags;
+    uint8_t misc;
+    u8vec3 colors;
+};
+
+const u8vec2 etc1_modifiers[8] = {
+    u8vec2(2, 8),
+    u8vec2(5, 17),
+    u8vec2(9, 29),
+    u8vec2(13, 42),
+    u8vec2(18, 60),
+    u8vec2(24, 80),
+    u8vec2(33, 106),
+    u8vec2(47, 183),
+};
+
+//u8vec3 SampleFromSubTile(SubTile subtile, u8vec2 coords) {
+//    bool differential_mode = bitfieldExtract(subtile.misc, 1, 1) != 0;
+//    bool flip = bitfieldExtract(subtile.misc, 0, 1) != 0;
+//
+//    if (flip) {
+//        coords = coords.yx;
+//    }
+//
+//    ivec3 color = ivec3(0);
+//    if (differential_mode) {
+//        color = subtile.colors & uint8_t(0xF8);
+//        if (coords.x >= 2) {
+//             color += (subtile.colors & uint8_t(0x07)) << 3;
+//        }
+//        color |= color >> 5;
+//    } else {
+//        if (coords.x < 2) {
+//            color = subtile.colors & uint8_t(0xF0);
+//            color |= color >> 4;
+//        } else {
+//            color = subtile.colors & uint8_t(0x0F);
+//            color |= color << 4;
+//        }
+//    }
+//
+//    uint table_index_index = 2u | (coords.x & 0x4u);
+//    uint table_index = bitfieldExtract(subtile.misc, int(table_index_index), 3);
+//    uint vec_select = bitfieldExtract(subtile.table_subindexes, int(gl_LocalInvocationIndex), 1);
+//    int modifier = etc1_modifiers[uint(table_index)][vec_select];
+//    bool negate = bitfieldExtract(subtile.table_subindexes, int(gl_LocalInvocationIndex), 1) != 0;
+//    if (negate) {
+//        modifier = -modifier;
+//    }
+//
+//    return u8vec3(clamp(color + modifier, 0, 0xFF));
+//}
+
+u8vec3 SampleFromSubTile(SubTile subtile, u8vec2 coords) {
+    return subtile.colors;
+}

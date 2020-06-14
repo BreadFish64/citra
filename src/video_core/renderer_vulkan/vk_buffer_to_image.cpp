@@ -26,6 +26,8 @@ BufferToImageConverter::BufferToImageConverter(Instance& vk_inst) : vk_inst{vk_i
         PX_CONVERSION(IA4, eR8G8Unorm, ia4_to_rg8),
         PX_CONVERSION(I4, eR8Unorm, i4_to_r8),
         PX_CONVERSION(A4, eR8Unorm, a4_to_r8),
+        PX_CONVERSION(ETC1, eR8G8B8A8Unorm, etc1_to_rgba8),
+        PX_CONVERSION(ETC1A4, eR8G8B8A8Unorm, etc1a4_to_rgba8),
     };
 #undef PX_CONVERSION
 
@@ -98,6 +100,13 @@ BufferToImageConverter::BufferToImageConverter(Instance& vk_inst) : vk_inst{vk_i
         auto pipeline = vk_inst.device->createComputePipelineUnique({}, pipeline_info);
         conversion_pipelines.emplace(src_fmt, std::make_pair(dst_fmt, std::move(pipeline)));
     }
+
+    vk::CommandBufferAllocateInfo command_buffer_allocate_info;
+    command_buffer_allocate_info.commandBufferCount = 1;
+    command_buffer_allocate_info.commandPool = *vk_inst.command_pool;
+    command_buffer_allocate_info.level = vk::CommandBufferLevel::ePrimary;
+    command_buffer =
+        std::move(vk_inst.device->allocateCommandBuffersUnique(command_buffer_allocate_info)[0]);
 }
 
 BufferToImageConverter::~BufferToImageConverter() {}
@@ -121,14 +130,9 @@ void BufferToImageConverter::ImageFromBuffer(vk::Buffer buffer, vk::Image image,
     case PX::I8:
     case PX::A8:
     case PX::A4:
-    case PX::I4: {
-        vk::CommandBufferAllocateInfo command_buffer_allocate_info;
-        command_buffer_allocate_info.commandBufferCount = 1;
-        command_buffer_allocate_info.commandPool = *vk_inst.command_pool;
-        command_buffer_allocate_info.level = vk::CommandBufferLevel::ePrimary;
-        auto command_buffer = std::move(
-            vk_inst.device->allocateCommandBuffersUnique(command_buffer_allocate_info)[0]);
-
+    case PX::I4:
+    case PX::ETC1:
+    case PX::ETC1A4: {
         vk::CommandBufferBeginInfo command_buffer_begin;
         command_buffer_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
         command_buffer->begin(command_buffer_begin);
@@ -204,23 +208,17 @@ void BufferToImageConverter::ImageFromBuffer(vk::Buffer buffer, vk::Image image,
         command_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute,
                                            *conversion_pipeline_layout, 0,
                                            *conversion_descriptor_set, {});
-        command_buffer->dispatch(width / 8, height / 8, 1);
+        u8 div = (pixel_format == PX::ETC1 || pixel_format == PX::ETC1A4) ? 4 : 8;
+        command_buffer->dispatch(width / div, height / div, 1);
         command_buffer->end();
         vk_inst.SubmitCommandBuffers(*command_buffer);
-        vk_inst.device->waitIdle();
     } break;
     case PX::D16:
     case PX::D24:
     case PX::D24S8: {
         if (tiled) {
-            LOG_CRITICAL(Render_OpenGL, "Unimplemented tiled Depth/Stencil");
+            LOG_DEBUG(Render_OpenGL, "Unimplemented tiled Depth/Stencil");
         }
-        vk::CommandBufferAllocateInfo command_buffer_allocate_info;
-        command_buffer_allocate_info.commandBufferCount = 1;
-        command_buffer_allocate_info.commandPool = *vk_inst.command_pool;
-        command_buffer_allocate_info.level = vk::CommandBufferLevel::ePrimary;
-        auto command_buffer = std::move(
-            vk_inst.device->allocateCommandBuffersUnique(command_buffer_allocate_info)[0]);
 
         vk::CommandBufferBeginInfo command_buffer_begin;
         command_buffer_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -267,15 +265,8 @@ void BufferToImageConverter::ImageFromBuffer(vk::Buffer buffer, vk::Image image,
 
         command_buffer->end();
         vk_inst.SubmitCommandBuffers(*command_buffer);
-        vk_inst.device->waitIdle();
     } break;
     default:
-        vk::CommandBufferAllocateInfo command_buffer_allocate_info;
-        command_buffer_allocate_info.commandBufferCount = 1;
-        command_buffer_allocate_info.commandPool = *vk_inst.command_pool;
-        command_buffer_allocate_info.level = vk::CommandBufferLevel::ePrimary;
-        auto command_buffer = std::move(
-            vk_inst.device->allocateCommandBuffersUnique(command_buffer_allocate_info)[0]);
 
         vk::CommandBufferBeginInfo command_buffer_begin;
         command_buffer_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -309,7 +300,6 @@ void BufferToImageConverter::ImageFromBuffer(vk::Buffer buffer, vk::Image image,
 
         command_buffer->end();
         vk_inst.SubmitCommandBuffers(*command_buffer);
-        vk_inst.device->waitIdle();
 
         LOG_ERROR(Render_OpenGL, "Pixel format not implemented: {}",
                   SurfaceParams::PixelFormatAsString(pixel_format));

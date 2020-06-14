@@ -1,0 +1,26 @@
+#version 450
+#define tile_size uvec3(4, 4, 1)
+#include "../etc_utils.comp"
+
+struct SubTileA {
+    uint8_t alpha[8];
+    SubTile subtile;
+};
+
+layout(binding = 0) readonly buffer src_buffer {
+     SubTileA subtiles[];
+};
+
+layout(binding = 1, rgba8ui) uniform writeonly lowp uimage2D dst_image;
+
+void main() {
+    SubTileA subtile = subtiles[GetTileIndex()];
+    u8vec3 color = SampleFromSubTile(subtile.subtile, u8vec2(gl_LocalInvocationID.xy));
+    uint8_t alpha = subtile.alpha[gl_LocalInvocationIndex / 2];
+    if (gl_LocalInvocationIndex % 2 == 0) {
+        alpha = (alpha << 4) | (alpha & uint8_t(0x0F));
+    } else {
+        alpha = (alpha >> 4) | (alpha & uint8_t(0xF0));
+    }
+    imageStore(dst_image, GetImageCoord(), u8vec4(color, alpha));
+}

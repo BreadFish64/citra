@@ -213,7 +213,7 @@ void ImageToBufferConverter::BufferFromImage(vk::Buffer buffer, vk::Image image,
     case PX::D24:
     case PX::D24S8: {
         if (tiled) {
-            LOG_CRITICAL(Render_OpenGL, "Unimplemented tiled Depth/Stencil");
+            LOG_DEBUG(Render_OpenGL, "Unimplemented tiled Depth/Stencil");
         }
         vk::CommandBufferAllocateInfo command_buffer_allocate_info;
         command_buffer_allocate_info.commandBufferCount = 1;

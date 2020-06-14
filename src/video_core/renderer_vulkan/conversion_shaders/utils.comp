@@ -1,3 +1,4 @@
+//? #version 450
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int32 : require
@@ -24,9 +25,13 @@ uint8_t MortonInterleave(u8vec2 pos) {
     return p;
 }
 
+uint32_t GetTileIndex() {
+    return (gl_WorkGroupID.y * stride) + gl_WorkGroupID.x * 8;
+}
+
 uint32_t GetAddress() {
     if (tiled) {
-        uint32_t address = ((gl_WorkGroupID.y * stride) + gl_WorkGroupID.x * 8) * 8;
+        uint32_t address = GetTileIndex() * 8;
         uint8_t morton = MortonInterleave(u8vec2(gl_LocalInvocationID.xy));
         return address | morton;
     }

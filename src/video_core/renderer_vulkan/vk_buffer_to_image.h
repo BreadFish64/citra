@@ -22,6 +22,7 @@ public:
     vk::UniqueDescriptorPool descriptor_pool;
     vk::UniqueDescriptorSet conversion_descriptor_set;
     vk::UniqueDescriptorSetLayout conversion_descriptor_layout;
+    vk::UniqueCommandBuffer command_buffer;
 
     void ImageFromBuffer(
         vk::Buffer buffer, vk::Image image, OpenGL::SurfaceParams::PixelFormat pixel_format,
