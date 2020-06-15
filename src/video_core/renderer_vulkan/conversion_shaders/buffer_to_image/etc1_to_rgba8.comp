@@ -9,7 +9,7 @@ layout(binding = 0) readonly buffer src_buffer {
 layout(binding = 1, rgba8ui) uniform writeonly lowp uimage2D dst_image;
 
 void main() {
-    SubTile subtile = subtiles[GetTileIndex()];
+    SubTile subtile = subtiles[ETCSubtileIndex()];
     u8vec3 color = SampleFromSubTile(subtile, u8vec2(gl_LocalInvocationID.xy));
     imageStore(dst_image, GetImageCoord(), u8vec4(color, 0xFF));
 }

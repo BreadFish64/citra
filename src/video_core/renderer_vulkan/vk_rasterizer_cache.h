@@ -44,8 +44,7 @@ struct CachedSurface;
 using OpenGL::SurfaceInterval;
 using OpenGL::SurfaceParams;
 class RasterizerCacheVulkan;
-class BufferToImageConverter;
-class ImageToBufferConverter;
+class ConvertaTron5000;
 
 struct TextureCubeConfig {
     PAddr px;
@@ -109,8 +108,7 @@ public:
     } fcram, vram;
 
     vk::DeviceSize min_flush;
-    std::unique_ptr<BufferToImageConverter> buffer_to_image;
-    std::unique_ptr<ImageToBufferConverter> image_to_buffer;
+    std::unique_ptr<ConvertaTron5000> buffer_to_image;
 
     /// Blit one surface's texture to another
     bool BlitSurfaces(const Surface& src_surface, const Common::Rectangle<u32>& src_rect,

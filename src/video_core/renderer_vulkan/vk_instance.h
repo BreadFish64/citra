@@ -36,7 +36,7 @@ VulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     default:
         break;
     }
-    LOG_GENERIC(Log::Class::Render_OpenGL, log_level, "{}", pCallbackData->pMessage);
+    LOG_GENERIC(Log::Class::Render_Vulkan, log_level, "{}", pCallbackData->pMessage);
     return VK_FALSE;
 }
 
@@ -103,8 +103,8 @@ struct Instance {
             physical_device = physical_devices[0];
         }
         {
-            LOG_INFO(Render_OpenGL, "{}", physical_device.getProperties().deviceName);
-            LOG_INFO(Render_OpenGL, "Vulkan {}.{}.{}",
+            LOG_INFO(Render_Vulkan, "{}", physical_device.getProperties().deviceName);
+            LOG_INFO(Render_Vulkan, "Vulkan {}.{}.{}",
                      VK_VERSION_MAJOR(physical_device.getProperties().apiVersion),
                      VK_VERSION_MINOR(physical_device.getProperties().apiVersion),
                      VK_VERSION_PATCH(physical_device.getProperties().apiVersion));
@@ -126,7 +126,7 @@ struct Instance {
                      vk::Format::eX8D24UnormPack32,
                 }) {
                 auto format_properties = physical_device.getFormatProperties(format);
-                LOG_INFO(Render_OpenGL, "{} linear: {}, tiling: {}", vk::to_string(format),
+                LOG_INFO(Render_Vulkan, "{} linear: {}, tiling: {}", vk::to_string(format),
                          vk::to_string(format_properties.linearTilingFeatures),
                          vk::to_string(format_properties.optimalTilingFeatures));
             }
@@ -169,7 +169,8 @@ struct Instance {
         }
         {
             vk::CommandPoolCreateInfo command_pool_info;
-            command_pool_info.setQueueFamilyIndex(queue_family_index);
+            command_pool_info.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+            command_pool_info.queueFamilyIndex = queue_family_index;
             command_pool = device->createCommandPoolUnique(command_pool_info);
         }
     }

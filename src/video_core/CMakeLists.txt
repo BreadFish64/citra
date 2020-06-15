@@ -72,10 +72,8 @@ add_library(video_core STATIC
     renderer_vulkan/vk_instance.h
     renderer_vulkan/vk_rasterizer_cache.cpp
     renderer_vulkan/vk_rasterizer_cache.h
-    renderer_vulkan/vk_buffer_to_image.cpp
-    renderer_vulkan/vk_buffer_to_image.h
-    renderer_vulkan/vk_image_to_buffer.cpp
-    renderer_vulkan/vk_image_to_buffer.h
+    renderer_vulkan/vk_convert_and_transfer.cpp
+    renderer_vulkan/vk_convert_and_transfer.h
     renderer_vulkan/conversion_shaders/buffer_to_image_conversions.h
     renderer_vulkan/conversion_shaders/image_to_buffer_conversions.h
     renderer_vulkan/conversion_shaders/utils.comp
@@ -180,6 +178,7 @@ set(buffer_to_image_shaders
     a4_to_r8
     etc1_to_rgba8
     etc1a4_to_rgba8
+    d24s8_to_s8
 )
 
 set(image_to_buffer_shaders
@@ -188,13 +187,7 @@ set(image_to_buffer_shaders
     rgba8_to_rgb5a1
     rgba8_to_rgb565
     rgba8_to_rgba4
-    rg8_to_ia8
-    rg8_to_rg8
-    r8_to_i8
-    r8_to_a8
-    rg8_to_ia4
-    r8_to_i4
-    r8_to_a4
+    s8_to_d24s8
 )
 
 function(CompileShader shader_name dir)
@@ -205,7 +198,7 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     MAIN_DEPENDENCY ${shader_path}
     OUTPUT ${shader_header}
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/renderer_vulkan/conversion_shaders/utils.comp
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/renderer_vulkan/conversion_shaders/utils.comp ${CMAKE_CURRENT_SOURCE_DIR}/renderer_vulkan/conversion_shaders/etc_utils.comp
     COMMAND glslc
         ${shader_path}
         -o ${shader_header}

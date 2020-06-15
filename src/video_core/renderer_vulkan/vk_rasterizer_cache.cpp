@@ -2,8 +2,7 @@
 
 #include "video_core/pica_state.h"
 #include "video_core/renderer_opengl/gl_state.h"
-#include "video_core/renderer_vulkan/vk_buffer_to_image.h"
-#include "video_core/renderer_vulkan/vk_image_to_buffer.h"
+#include "video_core/renderer_vulkan/vk_convert_and_transfer.h"
 #include "video_core/renderer_vulkan/vk_rasterizer_cache.h"
 #include "video_core/video_core.h"
 
@@ -37,8 +36,7 @@ RasterizerCacheVulkan::RasterizerCacheVulkan(Instance& vk_inst) : vk_inst{vk_ins
     init_mem_region(vram, Memory::VRAM_SIZE);
     init_mem_region(fcram, Memory::FCRAM_N3DS_SIZE);
 
-    buffer_to_image = std::make_unique<BufferToImageConverter>(vk_inst);
-    image_to_buffer = std::make_unique<ImageToBufferConverter>(vk_inst);
+    buffer_to_image = std::make_unique<ConvertaTron5000>(vk_inst);
 }
 
 RasterizerCacheVulkan::~RasterizerCacheVulkan() {}
@@ -115,7 +113,7 @@ bool RasterizerCacheVulkan::BlitSurfaces(const Surface& src_surface,
 
 void RasterizerCacheVulkan::CopySurface(const Surface& src_surface, const Surface& dst_surface,
                                         SurfaceInterval copy_interval){
-    LOG_CRITICAL(Render_OpenGL, "CopySurface unimplemented");
+    LOG_CRITICAL(Render_Vulkan, "CopySurface unimplemented");
 }
 
 Surface RasterizerCacheVulkan::GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale,
@@ -182,12 +180,12 @@ Surface RasterizerCacheVulkan::GetTextureSurface(const Pica::Texture::TextureInf
     u32 min_width = info.width >> max_level;
     u32 min_height = info.height >> max_level;
     if (min_width % 8 != 0 || min_height % 8 != 0) {
-        LOG_CRITICAL(Render_OpenGL, "Texture size ({}x{}) is not multiple of 8", min_width,
+        LOG_CRITICAL(Render_Vulkan, "Texture size ({}x{}) is not multiple of 8", min_width,
                      min_height);
         return nullptr;
     }
     if (info.width != (min_width << max_level) || info.height != (min_height << max_level)) {
-        LOG_CRITICAL(Render_OpenGL,
+        LOG_CRITICAL(Render_Vulkan,
                      "Texture size ({}x{}) does not support required mipmap level ({})",
                      params.width, params.height, max_level);
         return nullptr;
@@ -240,7 +238,7 @@ std::tuple<Surface, Surface, Common::Rectangle<u32>> RasterizerCacheVulkan::GetF
     // Make sure that framebuffers don't overlap if both color and depth are being used
     if (using_color_fb && using_depth_fb &&
         boost::icl::length(color_vp_interval & depth_vp_interval)) {
-        LOG_CRITICAL(Render_OpenGL, "Color and depth framebuffer memory regions overlap; "
+        LOG_CRITICAL(Render_Vulkan, "Color and depth framebuffer memory regions overlap; "
                                     "overlapping framebuffers not supported!");
         using_depth_fb = false;
     }
@@ -415,7 +413,7 @@ CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, const SurfaceParams& 
     owner.buffer_to_image->ImageFromBuffer(*region.buffer, *image, pixel_format, offset, width,
                                            height, stride, is_tiled);
 
-    LOG_DEBUG(Render_OpenGL, "Surface{}", PrintParams());
+    LOG_DEBUG(Render_Vulkan, "Surface{}", PrintParams());
 }
 
 CachedSurface::CachedSurface(RasterizerCacheVulkan& owner,
@@ -441,7 +439,7 @@ CachedSurface::~CachedSurface() {
     if (type == SurfaceType::Fill || type == SurfaceType::Texture)
         return;
     auto [region, offset] = owner.GetBufferOffset(addr);
-    owner.image_to_buffer->BufferFromImage(*region.buffer, *image, pixel_format, offset, width,
+    owner.buffer_to_image->BufferFromImage(*region.buffer, *image, pixel_format, offset, width,
                                            height, stride, is_tiled);
     vk::MappedMemoryRange range{*region.gpu_memory, Common::AlignDown(offset, owner.min_flush),
                                 Common::AlignUp(size, owner.min_flush)};
