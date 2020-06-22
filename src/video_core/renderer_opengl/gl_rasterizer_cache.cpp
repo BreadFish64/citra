@@ -1791,7 +1791,7 @@ void RasterizerCacheOpenGL::ClearAll(bool flush) {
     remove_surfaces.clear();
 }
 
-void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
+////////////void RasterizerCacheOpenGL::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {
     if (size == 0)
         return;
 

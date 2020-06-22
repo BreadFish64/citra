@@ -41,8 +41,7 @@ private:
     vk::UniquePipelineLayout buffer_to_image_pipeline_layout;
     vk::UniquePipelineLayout buffer_to_buffer_pipeline_layout;
     vk::UniqueCommandBuffer command_buffer;
-    vk::UniqueBuffer stencil_temp;
-    vk::UniqueBuffer depth_temp;
+    vk::UniqueBuffer depth_stencil_temp;
     vk::UniqueDeviceMemory temp_buf_mem;
 
     void BufferColorConvert(Direction direction, vk::Buffer buffer, vk::Image image,

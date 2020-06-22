@@ -4,6 +4,7 @@
 #include "video_core/renderer_vulkan/vk_rasterizer_cache.h"
 
 namespace Vulkan {
+
 ConvertaTron5000::ConvertaTron5000(Instance& vk_inst) : vk_inst{vk_inst} {
     using PX = OpenGL::SurfaceParams::PixelFormat;
     struct PXConversion {
@@ -154,25 +155,19 @@ ConvertaTron5000::ConvertaTron5000(Instance& vk_inst) : vk_inst{vk_inst} {
         temp_info.sharingMode = vk::SharingMode::eExclusive;
         temp_info.usage =
             vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer;
-        // enough for 3DS max surface size
-        temp_info.size = 1024 * 1024;
-        stencil_temp = vk_inst.device->createBufferUnique(temp_info);
-        temp_info.size *= 4;
-        depth_temp = vk_inst.device->createBufferUnique(temp_info);
+        // enough for 3DS max surface size, 4 byte aligned depth and 1 byte aligned stencil
+        temp_info.size = 1024 * 1024 * (4 + 1);
+        depth_stencil_temp = vk_inst.device->createBufferUnique(temp_info);
 
         vk::MemoryAllocateInfo allocation_info;
-        auto stencil_memory_requirements =
-            vk_inst.device->getBufferMemoryRequirements(*stencil_temp);
-        auto depth_memory_requirements = vk_inst.device->getBufferMemoryRequirements(*depth_temp);
+        auto memory_requirements =
+            vk_inst.device->getBufferMemoryRequirements(*depth_stencil_temp);
         // should check alignment probably, but I doubt it matters here
-        allocation_info.allocationSize =
-            depth_memory_requirements.size + stencil_memory_requirements.size;
+        allocation_info.allocationSize = memory_requirements.size;
         allocation_info.memoryTypeIndex = vk_inst.getMemoryType(
-            depth_memory_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+            memory_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
         temp_buf_mem = vk_inst.device->allocateMemoryUnique(allocation_info);
-        vk_inst.device->bindBufferMemory(*depth_temp, *temp_buf_mem, 0);
-        vk_inst.device->bindBufferMemory(*stencil_temp, *temp_buf_mem,
-                                         depth_memory_requirements.size);
+        vk_inst.device->bindBufferMemory(*depth_stencil_temp, *temp_buf_mem, 0);
     }
 }
 
@@ -334,10 +329,10 @@ void ConvertaTron5000::BufferColorConvert(Direction direction, vk::Buffer buffer
 
     vk_inst.device->updateDescriptorSets(desc_set_writes, {});
 
-    command_buffer->pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                                    vk::PipelineStageFlagBits::eComputeShader, {}, {}, {}, barrier);
     const auto pipeline = *conversion_piplines.at(pixel_format);
     command_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
+    command_buffer->pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+                                    vk::PipelineStageFlagBits::eComputeShader, {}, {}, {}, barrier);
     struct {
         u32 stride{};
         u8 pad[3]{};
@@ -363,7 +358,6 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
                                                                   : d24s8_image_to_buffer_pipeline);
 
     std::array<vk::WriteDescriptorSet, 2> desc_set_writes;
-
     vk::DeviceSize size = SurfaceParams::GetFormatBpp(PX::D24S8) * stride * height / 8;
     vk::DescriptorBufferInfo main_buffer_info;
     main_buffer_info.buffer = buffer;
@@ -378,7 +372,7 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
     desc_set_writes[0].pBufferInfo = &main_buffer_info;
 
     vk::DescriptorBufferInfo stencil_buffer_info;
-    stencil_buffer_info.buffer = *stencil_temp;
+    stencil_buffer_info.buffer = *depth_stencil_temp;
     stencil_buffer_info.offset = 0;
     stencil_buffer_info.range = width * height;
 
@@ -388,8 +382,6 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
     desc_set_writes[1].dstBinding = 1;
     desc_set_writes[1].dstSet = *buffer_to_buffer_descriptor_set;
     desc_set_writes[1].pBufferInfo = &stencil_buffer_info;
-
-    vk_inst.device->updateDescriptorSets(desc_set_writes, {});
 
     vk::ImageSubresourceRange image_range;
     image_range.aspectMask = vk::ImageAspectFlagBits::eDepth;
@@ -410,6 +402,8 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
     }
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+    vk_inst.device->updateDescriptorSets(desc_set_writes, {});
 
     vk::CommandBufferBeginInfo command_buffer_begin;
     command_buffer_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -433,10 +427,8 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
                                         vk::PipelineStageFlagBits::eTransfer, {}, {}, {}, barrier);
         std::array<vk::BufferImageCopy, 2> copy;
         auto& depth_copy = copy[0];
-        depth_copy.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
-        depth_copy.bufferRowLength = stride;
-        depth_copy.bufferOffset = offset;
         depth_copy.imageExtent = vk::Extent3D{width, height, 1};
+        depth_copy.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eDepth;
         depth_copy.imageSubresource.baseArrayLayer = 0;
         depth_copy.imageSubresource.layerCount = 1;
         depth_copy.imageSubresource.mipLevel = 0;
@@ -444,18 +436,15 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
         stencil_copy.imageSubresource = depth_copy.imageSubresource;
         stencil_copy.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eStencil;
         stencil_copy.imageExtent = depth_copy.imageExtent;
-
+        stencil_copy.bufferOffset = 1024 * 1024 * 4;
         if (direction == Direction::BufferToImage) {
-            command_buffer->copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal,
-                                              depth_copy);
-            command_buffer->copyBufferToImage(*stencil_temp, image,
-                                              vk::ImageLayout::eTransferDstOptimal, stencil_copy);
+            command_buffer->copyBufferToImage(*depth_stencil_temp, image,
+                                              vk::ImageLayout::eTransferDstOptimal,
+                                              copy);
             barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
         } else {
-            command_buffer->copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal, buffer,
-                                              depth_copy);
-            command_buffer->copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal,
-                                              *stencil_temp, stencil_copy);
+            command_buffer->copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal, *depth_stencil_temp,
+                                              copy);
             barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
         }
         barrier.newLayout = vk::ImageLayout::eGeneral;

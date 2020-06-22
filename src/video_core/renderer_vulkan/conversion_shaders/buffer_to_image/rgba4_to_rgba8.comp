@@ -2,15 +2,15 @@
 #include "../utils.comp"
 
 layout(binding = 0) readonly buffer src_buffer {
-    u8vec2 colors[];
+    uint16_t colors[];
 };
 
 layout(binding = 1, rgba8ui) uniform writeonly lowp uimage2D dst_image;
 
 void main() {
-    u8vec2 input_data = colors[GetAddress()];
-    u8vec4 rgba = input_data.xxyy;
-    rgba &= u8vec2(0xF0, 0x0F).xyxy;
-    rgba |= rgba >> u8vec2(4, -4).xyxy;
+    uint16_t input_data = colors[GetAddress()];
+    u8vec4 rgba = u8vec4(u16vec4(input_data) >> ivec4(12, 8, 4, 0));
+    rgba &= uint8_t(0x0F);
+    rgba |= rgba << 4;
     imageStore(dst_image, GetImageCoord(), uvec4(rgba));
 }

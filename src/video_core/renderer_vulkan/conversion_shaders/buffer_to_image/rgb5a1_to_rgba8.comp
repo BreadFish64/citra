@@ -12,6 +12,6 @@ void main() {
     u8vec3 color = u8vec3(u16vec3(input_data) >> u8vec3(11, 6, 1));
     color <<= 3;
     color |= color >> 5;
-    uint16_t alpha = (input_data & 0x01us) * 0xFFus;
+    uint8_t alpha = uint8_t((input_data & 0x01us) == 0us ? 0 : 0xFF);
     imageStore(dst_image, GetImageCoord(), uvec4(color, alpha));
 }

@@ -2,16 +2,18 @@
 #include "../utils.comp"
 
 layout(binding = 0) writeonly buffer src_buffer {
-    uint8_t raw[];
+    uint32_t raw[];
 };
 
 layout(binding = 1) readonly buffer dst_buffer {
-    uint8_t stencil[];
+    uint32_t depth[1024 * 1024];
+    uint8_t stencil[1024 * 1024];
 };
 
 void main() {
      ivec2 coord = GetImageCoord();
      uint32_t dst_addr = coord.y * gl_WorkGroupSize.x * gl_NumWorkGroups.x + coord.x;
-     uint8_t val = stencil[dst_addr];
-     raw[GetAddress() * 4 + 3] = val;
+     uint32_t d = depth[dst_addr];
+     uint32_t s = stencil[dst_addr];
+     raw[GetAddress()] = (d & 0x00FFFFFFu) | (s << 24);
 }
