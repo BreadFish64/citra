@@ -1,5 +1,7 @@
 #include <unordered_map>
 
+#include <boost/container/small_vector.hpp>
+
 #include "video_core/pica_state.h"
 #include "video_core/renderer_opengl/gl_state.h"
 #include "video_core/renderer_vulkan/vk_convert_and_transfer.h"
@@ -13,7 +15,8 @@ namespace Vulkan {
 RasterizerCacheVulkan::RasterizerCacheVulkan(Instance& vk_inst) : vk_inst{vk_inst} {
     min_flush = vk_inst.physical_device.getProperties().limits.nonCoherentAtomSize;
 
-    const auto init_mem_region = [&vk_inst](MemoryRegion& region, vk::DeviceSize size) {
+    const auto init_mem_region = [&vk_inst](MemoryRegion& region, vk::DeviceSize size,
+                                            PAddr guest_addr) {
         vk::BufferCreateInfo buffer_create_info;
         buffer_create_info.sharingMode = vk::SharingMode::eExclusive;
         buffer_create_info.usage = vk::BufferUsageFlagBits::eTransferSrc |
@@ -26,17 +29,22 @@ RasterizerCacheVulkan::RasterizerCacheVulkan(Instance& vk_inst) : vk_inst{vk_ins
         auto memory_requirements = vk_inst.device->getBufferMemoryRequirements(*region.buffer);
         allocation_info.allocationSize = memory_requirements.size;
         allocation_info.memoryTypeIndex = vk_inst.getMemoryType(
-            memory_requirements.memoryTypeBits,
-            vk::MemoryPropertyFlagBits::eHostVisible);
+            memory_requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible);
 
         region.gpu_memory = vk_inst.device->allocateMemoryUnique(allocation_info);
         vk_inst.device->bindBufferMemory(*region.buffer, *region.gpu_memory, 0);
         region.ptr = reinterpret_cast<u8*>(vk_inst.device->mapMemory(*region.gpu_memory, 0, size));
+        region.guest_addr = guest_addr;
     };
-    init_mem_region(vram, Memory::VRAM_SIZE);
-    init_mem_region(fcram, Memory::FCRAM_N3DS_SIZE);
+    init_mem_region(vram, Memory::VRAM_SIZE, Memory::VRAM_PADDR);
+    init_mem_region(fcram, Memory::FCRAM_N3DS_SIZE, Memory::FCRAM_PADDR);
 
     buffer_to_image = std::make_unique<ConvertaTron5000>(vk_inst);
+
+    validity_map += std::make_pair(SurfaceInterval{Memory::VRAM_PADDR, Memory::VRAM_PADDR_END},
+                                   WriteSource::CPU);
+    validity_map += std::make_pair(
+        SurfaceInterval{Memory::FCRAM_PADDR, Memory::FCRAM_N3DS_PADDR_END}, WriteSource::CPU);
 }
 
 RasterizerCacheVulkan::~RasterizerCacheVulkan() {}
@@ -59,6 +67,10 @@ bool RasterizerCacheVulkan::BlitSurfaces(const Surface& src_surface,
         break;
     case SurfaceParams::SurfaceType::Depth:
         image_range.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        break;
+    case SurfaceParams::SurfaceType::DepthStencil:
+        image_range.aspectMask =
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
         break;
     default:
         UNIMPLEMENTED();
@@ -112,7 +124,7 @@ bool RasterizerCacheVulkan::BlitSurfaces(const Surface& src_surface,
 }
 
 void RasterizerCacheVulkan::CopySurface(const Surface& src_surface, const Surface& dst_surface,
-                                        SurfaceInterval copy_interval){
+                                        SurfaceInterval copy_interval) {
     LOG_CRITICAL(Render_Vulkan, "CopySurface unimplemented");
 }
 
@@ -126,6 +138,9 @@ Surface RasterizerCacheVulkan::GetSurface(const SurfaceParams& params, ScaleMatc
 
     ASSERT(!params.is_tiled || (params.width % 8 == 0 && params.height % 8 == 0));
     auto surface = std::make_shared<CachedSurface>(*this, params);
+    ValidateRegion(surface->addr, surface->size);
+    auto [region, offset] = GetBufferOffset(surface->addr);
+    buffer_to_image->ImageFromBuffer(*region.buffer, offset, *surface);
     return surface;
 }
 
@@ -283,13 +298,100 @@ std::tuple<Surface, Common::Rectangle<u32>> RasterizerCacheVulkan::GetTexCopySur
     return {nullptr, {}};
 }
 
-void RasterizerCacheVulkan::FlushRegion(PAddr addr, u32 size, Surface flush_surface) {}
+void RasterizerCacheVulkan::FlushRegion(PAddr addr, u32 size) {
+    VideoCore::g_memory->RasterizerMarkRegionCached(addr, size, false);
+    // flush surfaces if they were the last write
+    SurfaceInterval region_interval{addr, addr + size};
+    auto [range_begin, range_end] = validity_map.equal_range(region_interval);
+    if (range_begin == validity_map.end())
+        return;
 
-void RasterizerCacheVulkan::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {}
+    auto [region, offset] = GetBufferOffset(addr);
+    auto cpu_ptr = VideoCore::g_memory->GetPhysicalPointer(region.guest_addr);
+    std::vector<vk::MappedMemoryRange> flush_regions;
+    boost::icl::interval_set<PAddr, std::less, SurfaceInterval> erase_regions;
 
-void RasterizerCacheVulkan::FlushAll() {}
+    for (auto it{range_begin}; it != range_end; ++it) {
+        if (it->second == WriteSource::GPU) {
+            auto interval = it->first & region_interval;
+            auto lower = Common::AlignDown(interval.lower(), min_flush);
+            auto upper = Common::AlignUp(interval.upper(), min_flush);
+            flush_regions.emplace_back(*region.gpu_memory, lower - region.guest_addr,
+                                       upper - lower);
+            LOG_TRACE(Render_Vulkan, "Flushing {:#08X} to {:#08X}", lower, upper);
+            erase_regions += it->first;
+        }
+    }
 
-void RasterizerCacheVulkan::ClearAll(bool flush) {}
+    if (flush_regions.empty())
+        return;
+
+    vk_inst.device->invalidateMappedMemoryRanges(flush_regions);
+    for (const auto& interval : erase_regions) {
+        auto offset = interval.lower() - region.guest_addr;
+        auto size = interval.upper() - interval.lower();
+        std::memcpy(cpu_ptr + offset, region.ptr + offset, size);
+    }
+
+    validity_map -= std::move(erase_regions);
+}
+
+void RasterizerCacheVulkan::InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner) {
+    if (region_owner) {
+        LOG_TRACE(Render_Vulkan, "Invalidating {:#08X} to {:#08X} by GPU", addr, addr + size);
+        validity_map += std::make_pair(SurfaceInterval{addr, addr + size}, WriteSource::GPU);
+    } else {
+        LOG_TRACE(Render_Vulkan, "Invalidating {:#08X} to {:#08X} by CPU", addr, addr + size);
+        validity_map += std::make_pair(SurfaceInterval{addr, addr + size}, WriteSource::CPU);
+    }
+}
+
+void RasterizerCacheVulkan::ValidateRegion(PAddr addr, u32 size) {
+    VideoCore::g_memory->RasterizerMarkRegionCached(addr, size, true);
+
+    SurfaceInterval region_interval{addr, addr + size};
+    auto [range_begin, range_end] = validity_map.equal_range(region_interval);
+    if (range_begin == validity_map.end())
+        return;
+
+    auto [region, offset] = GetBufferOffset(addr);
+    auto cpu_ptr = VideoCore::g_memory->GetPhysicalPointer(region.guest_addr);
+    std::vector<vk::MappedMemoryRange> flush_regions;
+    boost::icl::interval_set<PAddr, std::less, SurfaceInterval> erase_regions;
+
+    for (auto it{range_begin}; it != range_end; ++it) {
+        if (it->second == WriteSource::CPU) {
+            auto interval = it->first & region_interval;
+            {
+                auto lower = Common::AlignDown(interval.lower(), min_flush);
+                auto upper = Common::AlignUp(interval.upper(), min_flush);
+                flush_regions.emplace_back(*region.gpu_memory, lower - region.guest_addr,
+                                           upper - lower);
+            }
+            {
+                auto offset = interval.lower() - region.guest_addr;
+                auto size = interval.upper() - interval.lower();
+                std::memcpy(region.ptr + offset, cpu_ptr + offset, size);
+                LOG_TRACE(Render_Vulkan, "Revalidating {:#08X} to {:#08X}", interval.lower(),
+                          interval.upper());
+            }
+            erase_regions += interval;
+        }
+    }
+
+    if (flush_regions.empty())
+        return;
+    vk_inst.device->flushMappedMemoryRanges(flush_regions);
+    validity_map -= std::move(erase_regions);
+}
+
+void RasterizerCacheVulkan::FlushAll() {
+    FlushRegion(0, 0xFFFFFFFF);
+}
+
+void RasterizerCacheVulkan::ClearAll(bool flush) {
+    FlushAll();
+}
 
 std::tuple<RasterizerCacheVulkan::MemoryRegion&, vk::DeviceSize>
 RasterizerCacheVulkan::GetBufferOffset(PAddr addr) {
@@ -404,16 +506,8 @@ CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, const SurfaceParams& 
         glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle_mask.data());
         cur_state.Apply();
     }
-    auto [region, offset] = owner.GetBufferOffset(addr);
-    std::memcpy(region.ptr + offset, VideoCore::g_memory->GetPhysicalPointer(addr), size);
-    vk::MappedMemoryRange range{*region.gpu_memory, Common::AlignDown(offset, owner.min_flush),
-                                Common::AlignUp(size, owner.min_flush)};
-    owner.vk_inst.device->flushMappedMemoryRanges(range);
 
-    owner.buffer_to_image->ImageFromBuffer(*region.buffer, *image, pixel_format, offset, width,
-                                           height, stride, is_tiled);
-
-    LOG_DEBUG(Render_Vulkan, "Surface{}", PrintParams());
+    LOG_TRACE(Render_Vulkan, "Surface{}", PrintParams());
 }
 
 CachedSurface::CachedSurface(RasterizerCacheVulkan& owner,
@@ -439,11 +533,7 @@ CachedSurface::~CachedSurface() {
     if (type == SurfaceType::Fill || type == SurfaceType::Texture)
         return;
     auto [region, offset] = owner.GetBufferOffset(addr);
-    owner.buffer_to_image->BufferFromImage(*region.buffer, *image, pixel_format, offset, width,
-                                           height, stride, is_tiled);
-    vk::MappedMemoryRange range{*region.gpu_memory, Common::AlignDown(offset, owner.min_flush),
-                                Common::AlignUp(size, owner.min_flush)};
-    owner.vk_inst.device->invalidateMappedMemoryRanges(range);
-    std::memcpy(VideoCore::g_memory->GetPhysicalPointer(addr), region.ptr + offset, size);
+    // in the future, will do this when validating new surfaces or flushing
+    owner.buffer_to_image->BufferFromImage(*region.buffer, offset, *this);
 }
 } // namespace Vulkan

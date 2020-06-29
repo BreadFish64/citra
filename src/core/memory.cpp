@@ -549,6 +549,8 @@ void MemorySystem::RasterizerMarkRegionCached(PAddr start, u32 size, bool cached
                         page_type = PageType::RasterizerCachedMemory;
                         page_table->pointers[vaddr >> PAGE_BITS] = nullptr;
                         break;
+                    case PageType::RasterizerCachedMemory:
+                        break;
                     default:
                         UNREACHABLE();
                     }
@@ -566,7 +568,8 @@ void MemorySystem::RasterizerMarkRegionCached(PAddr start, u32 size, bool cached
                         break;
                     }
                     default:
-                        UNREACHABLE();
+                        break;
+                        // UNREACHABLE();
                     }
                 }
             }

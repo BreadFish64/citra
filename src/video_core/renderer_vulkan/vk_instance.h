@@ -56,6 +56,7 @@ struct Instance {
         VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,   VK_KHR_8BIT_STORAGE_EXTENSION_NAME};
 
     vk::UniqueInstance instance;
+    vk::UniqueDebugUtilsMessengerEXT messenger;
     vk::PhysicalDevice physical_device;
     vk::UniqueDevice device;
     vk::Queue queue;
@@ -96,7 +97,7 @@ struct Instance {
                                       vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation};
             messenger_info.setMessageSeverity(severity_flags);
             messenger_info.setMessageType(type_flags);
-            instance->createDebugUtilsMessengerEXT(messenger_info);
+            messenger = instance->createDebugUtilsMessengerEXTUnique(messenger_info);
         }
         {
             const auto physical_devices = instance->enumeratePhysicalDevices();

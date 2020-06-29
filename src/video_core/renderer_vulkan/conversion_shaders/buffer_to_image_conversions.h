@@ -62,4 +62,12 @@ constexpr u32 etc1a4_to_rgba8[]
 constexpr u32 d24s8_to_s8[]
 #include "video_core/renderer_vulkan/conversion_shaders/buffer_to_image/spirv/d24s8_to_s8.h"
     ;
+
+constexpr u32 d24_to_x8d24[]
+#include "video_core/renderer_vulkan/conversion_shaders/buffer_to_image/spirv/d24_to_x8d24.h"
+    ;
+
+constexpr u32 d16_to_d16[]
+#include "video_core/renderer_vulkan/conversion_shaders/buffer_to_image/spirv/d16_to_d16.h"
+    ;
 } // namespace Vulkan::BufferToImage

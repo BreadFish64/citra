@@ -1,0 +1,20 @@
+#version 450
+#include "../utils.comp"
+
+layout(binding = 0) writeonly buffer src_buffer {
+    uint8_t raw[];
+};
+
+layout(binding = 1) readonly buffer dst_buffer {
+    u8vec4 depth[1024 * 1024];
+};
+
+void main() {
+     ivec2 coord = GetImageCoord();
+     uint32_t dst_addr = coord.y * gl_WorkGroupSize.x * gl_NumWorkGroups.x + coord.x;
+     uint32_t src_addr = GetAddress() * 3;
+     u8vec4 d = depth[dst_addr];
+     raw[src_addr] = d[1];
+     raw[src_addr + 1] = d[2];
+     raw[src_addr + 2] = d[3];
+}

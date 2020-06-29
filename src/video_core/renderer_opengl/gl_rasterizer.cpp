@@ -292,7 +292,7 @@ RasterizerOpenGL::VertexArrayInfo RasterizerOpenGL::AnalyzeVertexArray(bool is_i
         vertex_min = 0xFFFF;
         vertex_max = 0;
         const u32 size = regs.pipeline.num_vertices * (index_u16 ? 2 : 1);
-        res_cache->FlushRegion(address, size, nullptr);
+        res_cache->FlushRegion(address, size);
         for (u32 index = 0; index < regs.pipeline.num_vertices; ++index) {
             const u32 vertex = index_u16 ? index_address_16[index] : index_address_8[index];
             vertex_min = std::min(vertex_min, vertex);
@@ -365,7 +365,7 @@ void RasterizerOpenGL::SetupVertexArray(u8* array_ptr, GLintptr buffer_offset,
         u32 vertex_num = vs_input_index_max - vs_input_index_min + 1;
         u32 data_size = loader.byte_count * vertex_num;
 
-        res_cache->FlushRegion(data_addr, data_size, nullptr);
+        res_cache->FlushRegion(data_addr, data_size);
         std::memcpy(array_ptr, VideoCore::g_memory->GetPhysicalPointer(data_addr), data_size);
 
         array_ptr += data_size;
@@ -908,6 +908,8 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
+    for (auto& tex : texture_surface)
+        tex = nullptr;
     return succeeded;
 }
 

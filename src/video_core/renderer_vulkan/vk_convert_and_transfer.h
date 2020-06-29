@@ -9,18 +9,18 @@
 
 namespace Vulkan {
 
+class CachedSurface;
+
 // TODO: make threadsafe
 class ConvertaTron5000 : NonCopyable {
 public:
     ConvertaTron5000(Instance& vk_inst);
     ~ConvertaTron5000();
 
-    void ImageFromBuffer(vk::Buffer buffer, vk::Image image,
-                         OpenGL::SurfaceParams::PixelFormat pixel_format, vk::DeviceSize offset,
-                         u32 width, u32 height, u32 stride, bool tiled);
-    void BufferFromImage(vk::Buffer buffer, vk::Image image,
-                         OpenGL::SurfaceParams::PixelFormat pixel_format, vk::DeviceSize offset,
-                         u32 width, u32 height, u32 stride, bool tiled);
+    void ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset,
+                         const CachedSurface& surface);
+    void BufferFromImage(vk::Buffer buffer, vk::DeviceSize offset,
+                         const CachedSurface& surface);
 
 private:
     using PX = OpenGL::SurfaceParams::PixelFormat;
@@ -28,11 +28,10 @@ private:
 
     Instance& vk_inst;
 
-    std::unordered_map<OpenGL::SurfaceParams::PixelFormat, vk::UniquePipeline> buffer_to_image_pipelines;
+    std::unordered_map<OpenGL::SurfaceParams::PixelFormat, vk::UniquePipeline>
+        buffer_to_image_pipelines;
     std::unordered_map<OpenGL::SurfaceParams::PixelFormat, vk::UniquePipeline>
         image_to_buffer_pipelines;
-    vk::UniquePipeline d24s8_buffer_to_image_pipeline;
-    vk::UniquePipeline d24s8_image_to_buffer_pipeline;
     vk::UniqueDescriptorPool descriptor_pool;
     vk::UniqueDescriptorSetLayout buffer_to_image_set_layout;
     vk::UniqueDescriptorSetLayout buffer_to_buffer_set_layout;
@@ -44,11 +43,8 @@ private:
     vk::UniqueBuffer depth_stencil_temp;
     vk::UniqueDeviceMemory temp_buf_mem;
 
-    void BufferColorConvert(Direction direction, vk::Buffer buffer, vk::Image image,
-                       OpenGL::SurfaceParams::PixelFormat pixel_format, vk::DeviceSize offset,
-                       u32 width, u32 height, u32 stride, bool tiled);
-    void D24S8Convert(Direction direction, vk::Buffer buffer, vk::Image image, vk::DeviceSize offset,
-                      u32 width,
-                      u32 height, u32 stride, bool tiled);
+    void BufferColorConvert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset, const CachedSurface& surface);
+    void D24S8Convert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset,
+                      const CachedSurface& surface);
 };
 } // namespace Vulkan

@@ -10,7 +10,7 @@ layout(binding = 1, r8ui) uniform writeonly lowp uimage2D dst_image;
 
 void main() {
     // assumes tiled
-    uint32_t addr = (GetTileIndex() << 3) | MortonInterleave(u8vec2(gl_LocalInvocationID.xy * uvec2(2, 1)));
+    uint32_t addr = (GetTileIndex() * 64) | MortonInterleave(u8vec2(gl_LocalInvocationID.xy * uvec2(2, 1)));
     addr >>= 1;
     uint8_t input_data = colors[addr];
     ivec2 coord = GetImageCoord() * ivec2(2, 1);

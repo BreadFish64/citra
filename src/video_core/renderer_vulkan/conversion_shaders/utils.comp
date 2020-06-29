@@ -10,7 +10,6 @@
 layout(local_size_x = tile_size.x, local_size_y = tile_size.y, local_size_z = tile_size.z) in;
 
 layout(push_constant) uniform Block {
-    uint32_t stride;
     bool tiled;
 };
 
@@ -26,16 +25,16 @@ uint8_t MortonInterleave(u8vec2 pos) {
 }
 
 uint32_t GetTileIndex() {
-    return (gl_WorkGroupID.y * stride) + gl_WorkGroupID.x * 8;
+    return uint32_t(gl_WorkGroupID.y) * uint32_t(gl_NumWorkGroups.x) + uint32_t(gl_WorkGroupID.x);
 }
 
 uint32_t GetAddress() {
     if (tiled) {
-        uint32_t address = GetTileIndex() * 8;
+        uint32_t address = GetTileIndex() * 64;
         uint8_t morton = MortonInterleave(u8vec2(gl_LocalInvocationID.xy));
         return address | morton;
     }
-    return uint32_t(gl_GlobalInvocationID.y) * stride + uint32_t(gl_GlobalInvocationID.x);
+    return uint32_t(gl_GlobalInvocationID.y) * uint32_t(gl_NumWorkGroups.x) * uint32_t(gl_WorkGroupSize.x) + uint32_t(gl_GlobalInvocationID.x);
 }
 
 ivec2 GetImageCoord() {

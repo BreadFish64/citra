@@ -179,6 +179,8 @@ set(buffer_to_image_shaders
     etc1_to_rgba8
     etc1a4_to_rgba8
     d24s8_to_s8
+    d24_to_x8d24
+    d16_to_d16
 )
 
 set(image_to_buffer_shaders
@@ -188,6 +190,8 @@ set(image_to_buffer_shaders
     rgba8_to_rgb565
     rgba8_to_rgba4
     s8_to_d24s8
+    x8d24_to_d24
+    d16_to_d16
 )
 
 function(CompileShader shader_name dir)
@@ -220,9 +224,9 @@ foreach(shader ${image_to_buffer_shaders})
     CompileShader(shader image_to_buffer)
 endforeach()
 
-add_executable(conversion_test
-    renderer_vulkan/conversion_test/main.cpp
-)
+#add_executable(conversion_test
+#    renderer_vulkan/conversion_test/main.cpp
+#)
 
-target_link_libraries(conversion_test PRIVATE video_core Vulkan::Vulkan lodepng glad)
-target_include_directories(conversion_test PRIVATE Vulkan::Vulkan)
+#target_link_libraries(conversion_test PRIVATE video_core Vulkan::Vulkan lodepng glad)
+#target_include_directories(conversion_test PRIVATE Vulkan::Vulkan)

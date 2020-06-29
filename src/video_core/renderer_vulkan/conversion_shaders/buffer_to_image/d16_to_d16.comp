@@ -1,0 +1,17 @@
+#version 450
+#include "../utils.comp"
+
+layout(binding = 0) readonly buffer src_buffer {
+    uint16_t raw[];
+};
+
+layout(binding = 1) writeonly buffer dst_buffer {
+    uint16_t depth[1024 * 1024];
+};
+
+void main() {
+     ivec2 coord = GetImageCoord();
+     uint32_t dst_addr = coord.y * gl_WorkGroupSize.x * gl_NumWorkGroups.x + coord.x;
+     uint16_t d = raw[GetAddress()];
+     depth[dst_addr] = d;
+}

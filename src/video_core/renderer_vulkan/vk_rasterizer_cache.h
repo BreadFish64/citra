@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include <boost/icl/interval_map.hpp>
+
 #include "video_core/renderer_vulkan/vk_instance.h"
 
 #include "video_core/renderer_opengl/gl_resource_manager.h"
@@ -10,6 +12,16 @@
 #include "video_core/texture/texture_decode.h"
 
 namespace Vulkan {
+
+enum WriteSource {
+    CPU,
+    GPU,
+};
+
+using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
+using ValidityMap = boost::icl::interval_map<PAddr, WriteSource, boost::icl::partial_enricher,
+                                             std::less, boost::icl::inplace_identity,
+                                             boost::icl::inter_section, SurfaceInterval>;
 
 class Win32SmartHandle : private NonCopyable {
     HANDLE handle = 0;
@@ -37,7 +49,6 @@ public:
             CloseHandle(handle);
     }
 };
-
 
 struct Instance;
 struct CachedSurface;
@@ -76,7 +87,7 @@ struct CachedTextureCube {
     OpenGL::OGLTexture texture;
 };
 
-struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface> {
+struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface>, NonCopyable {
     CachedSurface(RasterizerCacheVulkan& owner, const SurfaceParams& surface_params);
     CachedSurface(RasterizerCacheVulkan& owner, const GPU::Regs::MemoryFillConfig& config);
     ~CachedSurface();
@@ -104,6 +115,7 @@ public:
     struct MemoryRegion {
         vk::UniqueBuffer buffer;
         vk::UniqueDeviceMemory gpu_memory;
+        PAddr guest_addr;
         u8* ptr;
     } fcram, vram;
 
@@ -146,17 +158,23 @@ public:
     std::tuple<Surface, Common::Rectangle<u32>> GetTexCopySurface(const SurfaceParams& params);
 
     /// Write any cached resources overlapping the region back to memory (if dirty)
-    void FlushRegion(PAddr addr, u32 size, Surface flush_surface = nullptr);
+    void FlushRegion(PAddr addr, u32 size);
 
     /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
     void InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner);
+
+    /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
+    void ValidateRegion(PAddr addr, u32 size);
 
     /// Flush all cached resources tracked by this cache manager
     void FlushAll();
 
     /// Clear all cached resources tracked by this cache manager
     void ClearAll(bool flush);
+
     std::tuple<MemoryRegion&, vk::DeviceSize> GetBufferOffset(PAddr addr);
+
+    ValidityMap validity_map;
 };
 
 inline GLenum OpenGLPixelFormat(OpenGL::SurfaceParams::PixelFormat format) {
@@ -228,7 +246,7 @@ inline vk::Format VulkanPixelFormat(OpenGL::SurfaceParams::PixelFormat format) {
     case PX::D16:
         return vk::Format::eD16Unorm;
     case PX::D24:
-        return vk::Format::eD24UnormS8Uint;
+        return vk::Format::eX8D24UnormPack32;
     case PX::D24S8:
         return vk::Format::eD24UnormS8Uint;
     default:

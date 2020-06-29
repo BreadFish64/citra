@@ -380,6 +380,8 @@ void RendererOpenGL::SwapBuffers() {
 
     const auto& layout = render_window.GetFramebufferLayout();
     RenderToMailbox(layout, render_window.mailbox, false);
+    for (auto& info : screen_infos)
+        info.keep_alive.reset();
 
     if (frame_dumper.IsDumping()) {
         try {

@@ -44,6 +44,7 @@ static GMainWindow* GetMainWindow() {
 
 void EmuThread::run() {
     MicroProfileOnThreadCreate("EmuThread");
+    Common::SetCurrentThreadName("EmuThread");
     Frontend::ScopeAcquireContext scope(core_context);
 
     emit LoadProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
