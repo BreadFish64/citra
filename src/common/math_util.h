@@ -39,9 +39,16 @@ struct Rectangle {
         return Rectangle{left, top, static_cast<T>(left + GetWidth() * s),
                          static_cast<T>(top + GetHeight() * s)};
     }
+    bool operator==(const Rectangle<T>& rhs) {
+        return std::tie(left, top, right, bottom) ==
+               std::tie(rhs.left, rhs.top, rhs.right, rhs.bottom);
+    }
+    bool operator!=(const Rectangle<T>& rhs) {
+        return !(*this == rhs);
+    }
 };
 
 template <typename T>
-Rectangle(T, T, T, T)->Rectangle<T>;
+Rectangle(T, T, T, T) -> Rectangle<T>;
 
 } // namespace Common

@@ -6,6 +6,7 @@
 #include <cstring>
 #include <boost/serialization/array.hpp>
 #include <boost/serialization/binary_object.hpp>
+#include <boost/container/small_vector.hpp>
 #include "audio_core/dsp_interface.h"
 #include "common/archives.h"
 #include "common/assert.h"
@@ -504,7 +505,7 @@ MemoryRef MemorySystem::GetPhysicalRef(PAddr address) const {
 }
 
 /// For a rasterizer-accessible PAddr, gets a list of all possible VAddr
-static std::vector<VAddr> PhysicalToVirtualAddressForRasterizer(PAddr addr) {
+static boost::container::small_vector<VAddr, 2> PhysicalToVirtualAddressForRasterizer(PAddr addr) {
     if (addr >= VRAM_PADDR && addr < VRAM_PADDR_END) {
         return {addr - VRAM_PADDR + VRAM_VADDR};
     }

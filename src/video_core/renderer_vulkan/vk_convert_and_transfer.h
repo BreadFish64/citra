@@ -17,8 +17,8 @@ public:
     ConvertaTron5000(Instance& vk_inst);
     ~ConvertaTron5000();
 
-    void ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset,
-                         const CachedSurface& surface);
+    void ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset, const CachedSurface& surface,
+                         bool is_new);
     void BufferFromImage(vk::Buffer buffer, vk::DeviceSize offset,
                          const CachedSurface& surface);
 
@@ -43,8 +43,9 @@ private:
     vk::UniqueBuffer depth_stencil_temp;
     vk::UniqueDeviceMemory temp_buf_mem;
 
-    void BufferColorConvert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset, const CachedSurface& surface);
+    // eventually the command buffer should be started outside the function so this won't matter
+    void BufferColorConvert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset, const CachedSurface& surface, bool is_new);
     void D24S8Convert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset,
-                      const CachedSurface& surface);
+                      const CachedSurface& surface, bool is_new);
 };
 } // namespace Vulkan

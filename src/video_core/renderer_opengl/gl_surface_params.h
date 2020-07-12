@@ -268,6 +268,11 @@ public:
     PixelFormat pixel_format = PixelFormat::Invalid;
     SurfaceType type = SurfaceType::Invalid;
 
+    bool operator==(const SurfaceParams& rhs) const {
+        return GetInterval() == rhs.GetInterval() && width == rhs.width && height == rhs.height &&
+               pixel_format == rhs.pixel_format && is_tiled == rhs.is_tiled;
+    }
+
     static std::string_view SurfaceTypeAsString(SurfaceType type) {
         switch (type) {
         case SurfaceType::Color:
@@ -285,7 +290,7 @@ public:
         }
     }
 
-    std::string PrintParams() {
+    std::string PrintParams() const {
         return fmt::format(R"(
 Address:        {:08X}
 End Address:    {:08X}

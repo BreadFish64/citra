@@ -1,8 +1,11 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <boost/icl/interval_map.hpp>
+#include <boost/container/small_vector.hpp>
+#include <boost/container/flat_set.hpp>
 
 #include "video_core/renderer_vulkan/vk_instance.h"
 
@@ -11,17 +14,29 @@
 
 #include "video_core/texture/texture_decode.h"
 
+namespace boost::icl {
+// interval_map combiner functor: assigns new value if key exists
+// https://stackoverflow.com/a/58590667/9059048
+template <class Type>
+struct inplace_replace : identity_based_inplace_combine<Type> {
+    void operator()(Type& object, const Type& operand) const {
+        object = operand;
+    }
+};
+
+
+template <>
+inline std::string unary_template_to_string<inplace_replace>::apply() {
+    return "=";
+}
+} // namespace ::boost::icl
+
 namespace Vulkan {
 
 enum WriteSource {
     CPU,
     GPU,
 };
-
-using SurfaceInterval = boost::icl::right_open_interval<PAddr>;
-using ValidityMap = boost::icl::interval_map<PAddr, WriteSource, boost::icl::partial_enricher,
-                                             std::less, boost::icl::inplace_identity,
-                                             boost::icl::inter_section, SurfaceInterval>;
 
 class Win32SmartHandle : private NonCopyable {
     HANDLE handle = 0;
@@ -51,7 +66,6 @@ public:
 };
 
 struct Instance;
-struct CachedSurface;
 using OpenGL::SurfaceInterval;
 using OpenGL::SurfaceParams;
 class RasterizerCacheVulkan;
@@ -106,7 +120,35 @@ struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface
 
 using Surface = std::shared_ptr<CachedSurface>;
 
+struct SurfaceComparator {
+    bool operator()(const Surface& lhs, const Surface& rhs) {
+        return lhs->GetInterval() < rhs->GetInterval() || lhs->width < rhs->width ||
+               lhs->height < rhs->height || lhs->pixel_format < rhs->pixel_format ||
+               lhs->is_tiled < rhs->is_tiled;
+    }
+};
+
+//using SurfaceSet = boost::container::flat_set<Surface, SurfaceComparator, boost::container::small_vector<Surface, 1>>;
+template <typename T, std::size_t size>
+using MiniSet = boost::container::flat_set<T, std::less<T>, boost::container::small_vector<T, size>>;
+using SurfaceSet = MiniSet<Surface, 1>;
+
+// A gap means it is valid on both CPU and GPU, empty means it is valid on CPU, nullptr means that
+// it's valid in the GPU buffer, otherwise the pointer to most recently written surface in that area
+using ValidityMap =
+    boost::icl::interval_map<PAddr, std::optional<CachedSurface*>, boost::icl::partial_enricher,
+                             std::less, boost::icl::inplace_replace, boost::icl::inter_section,
+                             SurfaceInterval>;
+// This controls the actual lifetime of the surfaces. When a region is invalidated, it will be
+// subtracted from this. If the write came from the GPU it will be put inserted in the spot.
+// This way, fully invalid surfaces will be automatically destroyed.
+using StorageMap =
+    boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber, std::less,
+                             boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
+
 class RasterizerCacheVulkan : NonCopyable {
+    Surface SurfaceSearch(const SurfaceParams& params);
+    void FillSurface(const CachedSurface& surface, std::array<u8, 4> fill_buffer, Common::Rectangle<u32> rect);
 public:
     RasterizerCacheVulkan(Instance& vk_inst);
     ~RasterizerCacheVulkan();
@@ -161,10 +203,10 @@ public:
     void FlushRegion(PAddr addr, u32 size);
 
     /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
-    void InvalidateRegion(PAddr addr, u32 size, const Surface& region_owner);
+    void InvalidateRegion(PAddr addr, u32 size, Surface region_owner);
 
     /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
-    void ValidateRegion(PAddr addr, u32 size);
+    void ValidateSurface(const CachedSurface& surface, bool is_new);
 
     /// Flush all cached resources tracked by this cache manager
     void FlushAll();
@@ -175,13 +217,13 @@ public:
     std::tuple<MemoryRegion&, vk::DeviceSize> GetBufferOffset(PAddr addr);
 
     ValidityMap validity_map;
+    StorageMap storage_map;
 };
 
 inline GLenum OpenGLPixelFormat(OpenGL::SurfaceParams::PixelFormat format) {
     using PX = OpenGL::SurfaceParams::PixelFormat;
     switch (format) {
     case PX::RGBA8:
-    // needs conversion
     case PX::RGB8:
     case PX::RGBA4:
     case PX::RGB5A1:
@@ -226,7 +268,6 @@ inline vk::Format VulkanPixelFormat(OpenGL::SurfaceParams::PixelFormat format) {
     using PX = OpenGL::SurfaceParams::PixelFormat;
     switch (format) {
     case PX::RGBA8:
-        // needs conversion
     case PX::RGB8:
     case PX::RGBA4:
     case PX::RGB5A1:

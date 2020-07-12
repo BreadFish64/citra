@@ -648,7 +648,6 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         }
     };
 
-    std::array<Vulkan::Surface, 3> texture_surface;
     // Sync and bind the texture surfaces
     const auto pica_textures = regs.texturing.GetTextures();
     for (unsigned texture_index = 0; texture_index < pica_textures.size(); ++texture_index) {
@@ -662,10 +661,10 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                     if (!allow_shadow)
                         continue;
 
-                    texture_surface[texture_index] = res_cache->GetTextureSurface(texture);
-                    if (texture_surface[texture_index] != nullptr) {
+                    Vulkan::Surface texture_surface = res_cache->GetTextureSurface(texture);
+                    if (texture_surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_px =
-                                         texture_surface[texture_index]->texture.handle);
+                                         texture_surface->texture.handle);
                     } else {
                         state.image_shadow_texture_px = 0;
                     }
@@ -680,60 +679,60 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                     using CubeFace = Pica::TexturingRegs::CubeFace;
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveX);
-                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
-                    if (texture_surface[texture_index] != nullptr) {
+                    Vulkan::Surface texture_surface = res_cache->GetTextureSurface(info);
+                    if (texture_surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_px =
-                                         texture_surface[texture_index]->texture.handle);
+                                         texture_surface->texture.handle);
                     } else {
                         state.image_shadow_texture_px = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeX);
-                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
-                    if (texture_surface[texture_index] != nullptr) {
+                    texture_surface = res_cache->GetTextureSurface(info);
+                    if (texture_surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_nx =
-                                         texture_surface[texture_index]->texture.handle);
+                                         texture_surface->texture.handle);
                     } else {
                         state.image_shadow_texture_nx = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveY);
-                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
-                    if (texture_surface[texture_index] != nullptr) {
+                    texture_surface = res_cache->GetTextureSurface(info);
+                    if (texture_surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_py =
-                                         texture_surface[texture_index]->texture.handle);
+                                         texture_surface->texture.handle);
                     } else {
                         state.image_shadow_texture_py = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeY);
-                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
-                    if (texture_surface[texture_index] != nullptr) {
+                    texture_surface = res_cache->GetTextureSurface(info);
+                    if (texture_surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_ny =
-                                         texture_surface[texture_index]->texture.handle);
+                                         texture_surface->texture.handle);
                     } else {
                         state.image_shadow_texture_ny = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::PositiveZ);
-                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
-                    if (texture_surface[texture_index] != nullptr) {
+                    texture_surface = res_cache->GetTextureSurface(info);
+                    if (texture_surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_pz =
-                                         texture_surface[texture_index]->texture.handle);
+                                         texture_surface->texture.handle);
                     } else {
                         state.image_shadow_texture_pz = 0;
                     }
 
                     info.physical_address =
                         regs.texturing.GetCubePhysicalAddress(CubeFace::NegativeZ);
-                    texture_surface[texture_index] = res_cache->GetTextureSurface(info);
-                    if (texture_surface[texture_index] != nullptr) {
+                    texture_surface = res_cache->GetTextureSurface(info);
+                    if (texture_surface != nullptr) {
                         CheckBarrier(state.image_shadow_texture_nz =
-                                         texture_surface[texture_index]->texture.handle);
+                                         texture_surface->texture.handle);
                     } else {
                         state.image_shadow_texture_nz = 0;
                     }
@@ -762,10 +761,10 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
             }
 
             texture_samplers[texture_index].SyncWithConfig(texture.config);
-            texture_surface[texture_index] = res_cache->GetTextureSurface(texture);
-            if (texture_surface[texture_index] != nullptr) {
+            Vulkan::Surface texture_surface = res_cache->GetTextureSurface(texture);
+            if (texture_surface != nullptr) {
                 CheckBarrier(state.texture_units[texture_index].texture_2d =
-                                 texture_surface[texture_index]->texture.handle);
+                                 texture_surface->texture.handle);
             } else {
                 // Can occur when texture addr is null or its memory is unmapped/invalid
                 // HACK: In this case, the correct behaviour for the PICA is to use the last
@@ -908,8 +907,6 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                                    depth_surface);
     }
 
-    for (auto& tex : texture_surface)
-        tex = nullptr;
     return succeeded;
 }
 
@@ -1607,7 +1604,7 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
     screen_info.display_texture = src_surface->texture.handle;
-    screen_info.keep_alive = src_surface;
+   // screen_info.keep_alive = src_surface;
 
     return true;
 }

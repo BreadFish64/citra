@@ -188,7 +188,7 @@ ConvertaTron5000::ConvertaTron5000(Instance& vk_inst) : vk_inst{vk_inst} {
 ConvertaTron5000::~ConvertaTron5000() {}
 
 void ConvertaTron5000::ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset,
-                                       const CachedSurface& surface) {
+                                       const CachedSurface& surface, bool is_new) {
     switch (surface.pixel_format) {
     case PX::RGBA8:
     case PX::RGB8:
@@ -204,12 +204,12 @@ void ConvertaTron5000::ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset,
     case PX::I4:
     case PX::ETC1:
     case PX::ETC1A4: {
-        BufferColorConvert(Direction::BufferToImage, buffer, offset, surface);
+        BufferColorConvert(Direction::BufferToImage, buffer, offset, surface, is_new);
     } break;
     case PX::D24S8:
     case PX::D24:
     case PX::D16: {
-        D24S8Convert(Direction::BufferToImage, buffer, offset, surface);
+        D24S8Convert(Direction::BufferToImage, buffer, offset, surface, is_new);
     } break;
     default:
         UNREACHABLE();
@@ -225,12 +225,12 @@ void ConvertaTron5000::BufferFromImage(vk::Buffer buffer, vk::DeviceSize offset,
     case PX::RGBA4:
     case PX::RGB5A1:
     case PX::RGB565: {
-        BufferColorConvert(Direction::ImageToBuffer, buffer, offset, surface);
+        BufferColorConvert(Direction::ImageToBuffer, buffer, offset, surface, false);
     } break;
     case PX::D24S8:
     case PX::D24:
     case PX::D16: {
-        D24S8Convert(Direction::ImageToBuffer, buffer, offset, surface);
+        D24S8Convert(Direction::ImageToBuffer, buffer, offset, surface, false);
     } break;
     default:
         UNREACHABLE();
@@ -239,7 +239,8 @@ void ConvertaTron5000::BufferFromImage(vk::Buffer buffer, vk::DeviceSize offset,
 }
 
 void ConvertaTron5000::BufferColorConvert(Direction direction, vk::Buffer buffer,
-                                          vk::DeviceSize offset, const CachedSurface& surface) {
+                                          vk::DeviceSize offset, const CachedSurface& surface,
+                                          bool is_new) {
     const auto& conversion_pipelines = direction == Direction::BufferToImage
                                            ? buffer_to_image_pipelines
                                            : image_to_buffer_pipelines;
@@ -256,7 +257,7 @@ void ConvertaTron5000::BufferColorConvert(Direction direction, vk::Buffer buffer
     vk::ImageMemoryBarrier barrier;
     barrier.image = *surface.image;
     barrier.subresourceRange = image_range;
-    barrier.oldLayout = vk::ImageLayout::eUndefined;
+    barrier.oldLayout = is_new ? vk::ImageLayout::eUndefined : vk::ImageLayout::eGeneral;
     barrier.newLayout = vk::ImageLayout::eGeneral;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -324,7 +325,7 @@ void ConvertaTron5000::BufferColorConvert(Direction direction, vk::Buffer buffer
 }
 
 void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset,
-                                    const CachedSurface& surface) {
+                                    const CachedSurface& surface, bool is_new) {
     const auto& conversion_pipelines = direction == Direction::BufferToImage
                                            ? buffer_to_image_pipelines
                                            : image_to_buffer_pipelines;
@@ -368,7 +369,7 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
     barrier.image = *surface.image;
     barrier.subresourceRange = image_range;
     if (direction == Direction::BufferToImage) {
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.oldLayout = is_new ? vk::ImageLayout::eUndefined : vk::ImageLayout::eGeneral;
         barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
     } else {
         barrier.oldLayout = vk::ImageLayout::eGeneral;
