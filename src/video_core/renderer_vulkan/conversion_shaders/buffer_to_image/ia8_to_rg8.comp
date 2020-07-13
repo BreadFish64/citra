@@ -9,5 +9,5 @@ layout(binding = 1, rg8ui) uniform writeonly lowp uimage2D dst_image;
 
 void main() {
     u8vec2 output_data = colors[GetAddress()];
-    imageStore(dst_image, GetImageCoord(), uvec4(output_data, 0, 0));
+    imageStore(dst_image, GetImageCoord(), uvec4(output_data.gr, 0, 0));
 }

@@ -10,6 +10,6 @@ layout(binding = 1, r8ui) uniform writeonly lowp uimage2D dst_image;
 void main() {
     u8vec2 data = u8vec2(colors[GetAddress()]);
     data &= u8vec2(0xF0, 0x0F);
-    data |= data >> u8vec2(4, -4);
+    data |= u8vec2(data.r >> 4, data.g << 4);
     imageStore(dst_image, GetImageCoord(), uvec4(data, 0, 0));
 }

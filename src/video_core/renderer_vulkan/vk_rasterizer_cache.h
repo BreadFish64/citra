@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 
 #include <boost/icl/interval_map.hpp>
 #include <boost/container/small_vector.hpp>
@@ -147,7 +148,7 @@ using StorageMap =
                              boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
 
 class RasterizerCacheVulkan : NonCopyable {
-    Surface SurfaceSearch(const SurfaceParams& params);
+    std::tuple<Surface, StorageMap::iterator> SurfaceSearch(const SurfaceParams& params);
     void FillSurface(const CachedSurface& surface, std::array<u8, 4> fill_buffer, Common::Rectangle<u32> rect);
 public:
     RasterizerCacheVulkan(Instance& vk_inst);
@@ -243,7 +244,7 @@ inline GLenum OpenGLPixelFormat(OpenGL::SurfaceParams::PixelFormat format) {
     case PX::D16:
         return GL_DEPTH_COMPONENT16;
     case PX::D24:
-        return GL_DEPTH_COMPONENT24;
+        return GL_DEPTH_COMPONENT32;
     case PX::D24S8:
         return GL_DEPTH24_STENCIL8;
     default:

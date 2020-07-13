@@ -550,97 +550,6 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                               ? color_surface->res_scale
                               : (depth_surface == nullptr ? 1u : depth_surface->res_scale);
 
-    Common::Rectangle<u32> draw_rect{
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
-                                             viewport_rect_unscaled.left * res_scale,
-                                         surfaces_rect.left, surfaces_rect.right)), // Left
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
-                                             viewport_rect_unscaled.top * res_scale,
-                                         surfaces_rect.bottom, surfaces_rect.top)), // Top
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
-                                             viewport_rect_unscaled.right * res_scale,
-                                         surfaces_rect.left, surfaces_rect.right)), // Right
-        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
-                                             viewport_rect_unscaled.bottom * res_scale,
-                                         surfaces_rect.bottom, surfaces_rect.top))}; // Bottom
-
-    // Bind the framebuffer surfaces
-    state.draw.draw_framebuffer = framebuffer.handle;
-    state.Apply();
-
-    if (shadow_rendering) {
-        if (!allow_shadow || color_surface == nullptr) {
-            return true;
-        }
-        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_WIDTH,
-                                color_surface->width * color_surface->res_scale);
-        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_HEIGHT,
-                                color_surface->height * color_surface->res_scale);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                               0);
-        state.image_shadow_buffer = color_surface->texture.handle;
-    } else {
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                               color_surface != nullptr ? color_surface->texture.handle : 0, 0);
-        if (depth_surface != nullptr) {
-            if (has_stencil) {
-                // attach both depth and stencil
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                                       GL_TEXTURE_2D, depth_surface->texture.handle, 0);
-            } else {
-                // attach depth
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                                       depth_surface->texture.handle, 0);
-                // clear stencil attachment
-                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
-                                       0);
-            }
-        } else {
-            // clear both depth and stencil attachment
-            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
-                                   0, 0);
-        }
-    }
-
-    // Sync the viewport
-    state.viewport.x =
-        static_cast<GLint>(surfaces_rect.left) + viewport_rect_unscaled.left * res_scale;
-    state.viewport.y =
-        static_cast<GLint>(surfaces_rect.bottom) + viewport_rect_unscaled.bottom * res_scale;
-    state.viewport.width = static_cast<GLsizei>(viewport_rect_unscaled.GetWidth() * res_scale);
-    state.viewport.height = static_cast<GLsizei>(viewport_rect_unscaled.GetHeight() * res_scale);
-
-    if (uniform_block_data.data.framebuffer_scale != res_scale) {
-        uniform_block_data.data.framebuffer_scale = res_scale;
-        uniform_block_data.dirty = true;
-    }
-
-    // Scissor checks are window-, not viewport-relative, which means that if the cached texture
-    // sub-rect changes, the scissor bounds also need to be updated.
-    GLint scissor_x1 =
-        static_cast<GLint>(surfaces_rect.left + regs.rasterizer.scissor_test.x1 * res_scale);
-    GLint scissor_y1 =
-        static_cast<GLint>(surfaces_rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale);
-    // x2, y2 have +1 added to cover the entire pixel area, otherwise you might get cracks when
-    // scaling or doing multisampling.
-    GLint scissor_x2 =
-        static_cast<GLint>(surfaces_rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale);
-    GLint scissor_y2 = static_cast<GLint>(surfaces_rect.bottom +
-                                          (regs.rasterizer.scissor_test.y2 + 1) * res_scale);
-
-    if (uniform_block_data.data.scissor_x1 != scissor_x1 ||
-        uniform_block_data.data.scissor_x2 != scissor_x2 ||
-        uniform_block_data.data.scissor_y1 != scissor_y1 ||
-        uniform_block_data.data.scissor_y2 != scissor_y2) {
-
-        uniform_block_data.data.scissor_x1 = scissor_x1;
-        uniform_block_data.data.scissor_x2 = scissor_x2;
-        uniform_block_data.data.scissor_y1 = scissor_y1;
-        uniform_block_data.data.scissor_y2 = scissor_y2;
-        uniform_block_data.dirty = true;
-    }
-
     bool need_duplicate_texture = false;
     auto CheckBarrier = [&need_duplicate_texture, &color_surface](GLuint handle) {
         if (color_surface && color_surface->texture.handle == handle) {
@@ -780,41 +689,132 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         }
     }
 
-    OGLTexture temp_tex;
-    if (need_duplicate_texture) {
-        // The game is trying to use a surface as a texture and framebuffer at the same time
-        // which causes unpredictable behavior on the host.
-        // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
-        temp_tex.Create();
-        glBindTexture(GL_TEXTURE_2D, temp_tex.handle);
-        auto [internal_format, format, type] = GetFormatTuple(color_surface->pixel_format);
-        OGLTexture::Allocate(GL_TEXTURE_2D, color_surface->max_level + 1, internal_format, format,
-                             type, color_surface->GetScaledWidth(),
-                             color_surface->GetScaledHeight());
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glBindTexture(GL_TEXTURE_2D, state.texture_units[0].texture_2d);
+    //OGLTexture temp_tex;
+    //if (need_duplicate_texture) {
+    //    // The game is trying to use a surface as a texture and framebuffer at the same time
+    //    // which causes unpredictable behavior on the host.
+    //    // Making a copy to sample from eliminates this issue and seems to be fairly cheap.
+    //    temp_tex.Create();
+    //    glBindTexture(GL_TEXTURE_2D, temp_tex.handle);
+    //    auto [internal_format, format, type] = GetFormatTuple(color_surface->pixel_format);
+    //    OGLTexture::Allocate(GL_TEXTURE_2D, color_surface->max_level + 1, internal_format, format,
+    //                         type, color_surface->GetScaledWidth(),
+    //                         color_surface->GetScaledHeight());
+    //    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    //    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    //    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    //    glBindTexture(GL_TEXTURE_2D, state.texture_units[0].texture_2d);
 
-        for (std::size_t level{0}; level <= color_surface->max_level; ++level) {
-            glCopyImageSubData(color_surface->texture.handle, GL_TEXTURE_2D, level, 0, 0, 0,
-                               temp_tex.handle, GL_TEXTURE_2D, level, 0, 0, 0,
-                               color_surface->GetScaledWidth() >> level,
-                               color_surface->GetScaledHeight() >> level, 1);
-        }
+    //    for (std::size_t level{0}; level <= color_surface->max_level; ++level) {
+    //        glCopyImageSubData(color_surface->texture.handle, GL_TEXTURE_2D, level, 0, 0, 0,
+    //                           temp_tex.handle, GL_TEXTURE_2D, level, 0, 0, 0,
+    //                           color_surface->GetScaledWidth() >> level,
+    //                           color_surface->GetScaledHeight() >> level, 1);
+    //    }
 
-        for (auto& unit : state.texture_units) {
-            if (unit.texture_2d == color_surface->texture.handle) {
-                unit.texture_2d = temp_tex.handle;
-            }
+    //    for (auto& unit : state.texture_units) {
+    //        if (unit.texture_2d == color_surface->texture.handle) {
+    //            unit.texture_2d = temp_tex.handle;
+    //        }
+    //    }
+    //    for (auto shadow_unit : {&state.image_shadow_texture_nx, &state.image_shadow_texture_ny,
+    //                             &state.image_shadow_texture_nz, &state.image_shadow_texture_px,
+    //                             &state.image_shadow_texture_py, &state.image_shadow_texture_pz}) {
+    //        if (*shadow_unit == color_surface->texture.handle) {
+    //            *shadow_unit = temp_tex.handle;
+    //        }
+    //    }
+    //}
+
+    Common::Rectangle<u32> draw_rect{
+        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
+                                             viewport_rect_unscaled.left * res_scale,
+                                         surfaces_rect.left, surfaces_rect.right)), // Left
+        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
+                                             viewport_rect_unscaled.top * res_scale,
+                                         surfaces_rect.bottom, surfaces_rect.top)), // Top
+        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.left) +
+                                             viewport_rect_unscaled.right * res_scale,
+                                         surfaces_rect.left, surfaces_rect.right)), // Right
+        static_cast<u32>(std::clamp<s32>(static_cast<s32>(surfaces_rect.bottom) +
+                                             viewport_rect_unscaled.bottom * res_scale,
+                                         surfaces_rect.bottom, surfaces_rect.top))}; // Bottom
+
+    // Bind the framebuffer surfaces
+    state.draw.draw_framebuffer = framebuffer.handle;
+    state.Apply();
+
+    if (shadow_rendering) {
+        if (!allow_shadow || color_surface == nullptr) {
+            return true;
         }
-        for (auto shadow_unit : {&state.image_shadow_texture_nx, &state.image_shadow_texture_ny,
-                                 &state.image_shadow_texture_nz, &state.image_shadow_texture_px,
-                                 &state.image_shadow_texture_py, &state.image_shadow_texture_pz}) {
-            if (*shadow_unit == color_surface->texture.handle) {
-                *shadow_unit = temp_tex.handle;
+        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_WIDTH,
+                                color_surface->width * color_surface->res_scale);
+        glFramebufferParameteri(GL_DRAW_FRAMEBUFFER, GL_FRAMEBUFFER_DEFAULT_HEIGHT,
+                                color_surface->height * color_surface->res_scale);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
+                               0);
+        state.image_shadow_buffer = color_surface->texture.handle;
+    } else {
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                               color_surface != nullptr ? color_surface->texture.handle : 0, 0);
+        if (depth_surface != nullptr) {
+            if (has_stencil) {
+                // attach both depth and stencil
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
+                                       GL_TEXTURE_2D, depth_surface->texture.handle, 0);
+            } else {
+                // attach depth
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+                                       depth_surface->texture.handle, 0);
+                // clear stencil attachment
+                glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0,
+                                       0);
             }
+        } else {
+            // clear both depth and stencil attachment
+            glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D,
+                                   0, 0);
         }
+    }
+
+    // Sync the viewport
+    state.viewport.x =
+        static_cast<GLint>(surfaces_rect.left) + viewport_rect_unscaled.left * res_scale;
+    state.viewport.y =
+        static_cast<GLint>(surfaces_rect.bottom) + viewport_rect_unscaled.bottom * res_scale;
+    state.viewport.width = static_cast<GLsizei>(viewport_rect_unscaled.GetWidth() * res_scale);
+    state.viewport.height = static_cast<GLsizei>(viewport_rect_unscaled.GetHeight() * res_scale);
+
+    if (uniform_block_data.data.framebuffer_scale != res_scale) {
+        uniform_block_data.data.framebuffer_scale = res_scale;
+        uniform_block_data.dirty = true;
+    }
+
+    // Scissor checks are window-, not viewport-relative, which means that if the cached texture
+    // sub-rect changes, the scissor bounds also need to be updated.
+    GLint scissor_x1 =
+        static_cast<GLint>(surfaces_rect.left + regs.rasterizer.scissor_test.x1 * res_scale);
+    GLint scissor_y1 =
+        static_cast<GLint>(surfaces_rect.bottom + regs.rasterizer.scissor_test.y1 * res_scale);
+    // x2, y2 have +1 added to cover the entire pixel area, otherwise you might get cracks when
+    // scaling or doing multisampling.
+    GLint scissor_x2 =
+        static_cast<GLint>(surfaces_rect.left + (regs.rasterizer.scissor_test.x2 + 1) * res_scale);
+    GLint scissor_y2 = static_cast<GLint>(surfaces_rect.bottom +
+                                          (regs.rasterizer.scissor_test.y2 + 1) * res_scale);
+
+    if (uniform_block_data.data.scissor_x1 != scissor_x1 ||
+        uniform_block_data.data.scissor_x2 != scissor_x2 ||
+        uniform_block_data.data.scissor_y1 != scissor_y1 ||
+        uniform_block_data.data.scissor_y2 != scissor_y2) {
+
+        uniform_block_data.data.scissor_x1 = scissor_x1;
+        uniform_block_data.data.scissor_x2 = scissor_x2;
+        uniform_block_data.data.scissor_y1 = scissor_y1;
+        uniform_block_data.data.scissor_y2 = scissor_y2;
+        uniform_block_data.dirty = true;
     }
 
     // Sync and bind the shader
@@ -867,7 +867,8 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                          static_cast<GLsizei>(vertices));
         }
     }
-
+    // TODO: fix GPU side synchronization properly
+        glFinish();
     vertex_batch.clear();
 
     // Reset textures in rasterizer state context because the rasterizer cache might delete them

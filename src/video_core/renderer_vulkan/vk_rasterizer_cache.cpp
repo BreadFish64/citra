@@ -10,16 +10,18 @@
 
 namespace Vulkan {
 
-Surface RasterizerCacheVulkan::SurfaceSearch(const SurfaceParams& params) {
-    auto [begin, end] = storage_map.equal_range(params.GetInterval());
-    for (auto set{begin}; set != end; ++set) {
-        for (const auto& check_surface : set->second) {
+std::tuple<Surface, StorageMap::iterator> RasterizerCacheVulkan::SurfaceSearch(
+    const SurfaceParams& params) {
+    auto set_iter{storage_map.lower_bound(params.GetInterval())};
+    for (; set_iter != storage_map.end() && set_iter->first.upper() <= params.end; ++set_iter) {
+        // TODO: check if linear search is the best option here
+        for (const auto& check_surface : set_iter->second) {
             if (params == static_cast<const SurfaceParams&>(*check_surface)) {
-                return check_surface;
+                return std::make_tuple(check_surface, set_iter);
             }
         }
     }
-    return nullptr;
+    return std::make_tuple(nullptr, set_iter);
 }
 
 void RasterizerCacheVulkan::FillSurface(const CachedSurface& surface, std::array<u8, 4> fill_buffer,
@@ -50,7 +52,7 @@ void RasterizerCacheVulkan::FillSurface(const CachedSurface& surface, std::array
         vk::ImageMemoryBarrier barrier;
         barrier.image = *surface.image;
         barrier.subresourceRange = image_range;
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
+        barrier.oldLayout = vk::ImageLayout::eGeneral;
         barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -230,15 +232,16 @@ Surface RasterizerCacheVulkan::GetSurface(const SurfaceParams& params, ScaleMatc
     ASSERT(params.width == params.stride);
 
     ASSERT(!params.is_tiled || (params.width % 8 == 0 && params.height % 8 == 0));
-    Surface surface{SurfaceSearch(params)};
+    auto [surface, iter] = SurfaceSearch(params);
 
     bool is_new{!surface};
     if (is_new) {
         surface = std::make_shared<CachedSurface>(*this, params);
-        storage_map += std::make_pair(surface->GetInterval(), SurfaceSet{surface});
+        storage_map.add(iter, std::make_pair(surface->GetInterval(), SurfaceSet{surface}));
     }
 
     // TODO: figure out load_if_create
+    if (load_if_create)
     ValidateSurface(*surface, is_new);
     return surface;
 }
@@ -351,7 +354,7 @@ std::tuple<Surface, Surface, Common::Rectangle<u32>> RasterizerCacheVulkan::GetF
 
     // Make sure that framebuffers don't overlap if both color and depth are being used
     if (using_color_fb && using_depth_fb &&
-        boost::icl::length(color_vp_interval & depth_vp_interval)) {
+        boost::icl::intersects(color_vp_interval, depth_vp_interval)) {
         LOG_CRITICAL(Render_Vulkan, "Color and depth framebuffer memory regions overlap; "
                                     "overlapping framebuffers not supported!");
         using_depth_fb = false;
@@ -373,8 +376,7 @@ std::tuple<Surface, Surface, Common::Rectangle<u32>> RasterizerCacheVulkan::GetF
     if (color_surface != nullptr && depth_surface != nullptr) {
         fb_rect = color_rect;
         // Color and Depth surfaces must have the same dimensions and offsets
-        if (color_rect.bottom != depth_rect.bottom || color_rect.top != depth_rect.top ||
-            color_rect.left != depth_rect.left || color_rect.right != depth_rect.right) {
+        if (color_rect != depth_rect) {
             color_surface = GetSurface(color_params, ScaleMatch::Exact, false);
             depth_surface = GetSurface(depth_params, ScaleMatch::Exact, false);
             fb_rect = color_surface->GetScaledRect();
@@ -384,7 +386,6 @@ std::tuple<Surface, Surface, Common::Rectangle<u32>> RasterizerCacheVulkan::GetF
     } else if (depth_surface != nullptr) {
         fb_rect = depth_rect;
     }
-
     return {color_surface, depth_surface, fb_rect};
 }
 
@@ -396,11 +397,11 @@ Surface RasterizerCacheVulkan::GetFillSurface(const GPU::Regs::MemoryFillConfig&
     params.type = SurfaceParams::SurfaceType::Fill;
     params.res_scale = std::numeric_limits<u16>::max();
 
-    Surface surface{SurfaceSearch(params)};
+    auto [surface, iter] = SurfaceSearch(params);
     bool is_new{!surface};
     if (is_new) {
         surface = std::make_shared<CachedSurface>(*this, config);
-        storage_map += std::make_pair(surface->GetInterval(), SurfaceSet{surface});
+        storage_map.add(iter, std::make_pair(surface->GetInterval(), SurfaceSet{surface}));
     }
 
     auto start_page = Common::AlignDown(surface->addr, Memory::PAGE_SIZE);
@@ -413,7 +414,7 @@ std::tuple<Surface, Common::Rectangle<u32>> RasterizerCacheVulkan::GetTexCopySur
     const SurfaceParams& params) {
     Common::Rectangle<u32> rect{};
 
-    Surface match_surface{SurfaceSearch(params)};
+    auto [match_surface, _] = SurfaceSearch(params);
 
     if (match_surface) {
         ValidateSurface(*match_surface, false);
@@ -489,12 +490,12 @@ void RasterizerCacheVulkan::InvalidateRegion(PAddr addr, u32 size, Surface regio
         LOG_TRACE(Render_Vulkan, "Region overwritten by surface{}", region_owner->PrintParams());
         // Set 'region_owner' as the most recent write
         validity_map += std::make_pair(interval, std::make_optional(region_owner.get()));
-        // Destroy all other surface references interval
+        // Destroy all other surface references in interval
         storage_map -= interval;
         storage_map += std::make_pair(interval, SurfaceSet{std::move(region_owner)});
     } else {
         LOG_TRACE(Render_Vulkan, "Invalidating {:#08X} to {:#08X} by CPU", addr, addr + size);
-        // Destroy all surface references interval
+        // Destroy all surface references in interval
         storage_map -= interval;
         // Set CPU as most recent write
         validity_map +=
@@ -561,7 +562,7 @@ void RasterizerCacheVulkan::ValidateSurface(const CachedSurface& surface, bool i
         vk_inst.device->flushMappedMemoryRanges(flush_regions);
 
     if (!flush_surfaces.empty() || !erase_regions.empty() || is_new) {
-        buffer_to_image->ImageFromBuffer(*region.buffer, offset, surface, is_new);
+        buffer_to_image->ImageFromBuffer(*region.buffer, offset, surface);
     }
 
     validity_map -= std::move(erase_regions);
@@ -648,6 +649,42 @@ CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, const SurfaceParams& 
     image_memory = owner.vk_inst.device->allocateMemoryUnique(image_memory_allocation_info);
     owner.vk_inst.device->bindImageMemory(*image, *image_memory, 0);
 
+    vk::CommandBufferAllocateInfo command_buffer_allocate_info;
+    command_buffer_allocate_info.commandBufferCount = 1;
+    command_buffer_allocate_info.commandPool = *owner.vk_inst.command_pool;
+    command_buffer_allocate_info.level = vk::CommandBufferLevel::ePrimary;
+    auto command_buffer = std::move(
+        owner.vk_inst.device->allocateCommandBuffersUnique(command_buffer_allocate_info)[0]);
+
+    vk::ImageMemoryBarrier barrier;
+    barrier.image = *image;
+    switch (type) {
+    case OpenGL::SurfaceParams::SurfaceType::Color:
+    case OpenGL::SurfaceParams::SurfaceType::Texture:
+        barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eColor;
+        break;
+    case OpenGL::SurfaceParams::SurfaceType::DepthStencil:
+        barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eStencil;
+    case OpenGL::SurfaceParams::SurfaceType::Depth:
+        barrier.subresourceRange.aspectMask |= vk::ImageAspectFlagBits::eDepth;
+        break;
+    }
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.oldLayout = vk::ImageLayout::eUndefined;
+    barrier.newLayout = vk::ImageLayout::eGeneral;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    vk::CommandBufferBeginInfo command_buffer_begin;
+    command_buffer_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+    command_buffer->begin(command_buffer_begin);
+    command_buffer->pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+                                    vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {}, barrier);
+    command_buffer->end();
+    owner.vk_inst.SubmitCommandBuffers(*command_buffer);
+
     shmem_handle = owner.vk_inst.device->getMemoryWin32HandleKHR(
         {*image_memory, vk::ExternalMemoryHandleTypeFlagBits::eOpaqueWin32});
 
@@ -697,6 +734,7 @@ CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, const SurfaceParams& 
     }
 
     LOG_TRACE(Render_Vulkan, "Surface{}", PrintParams());
+    owner.vk_inst.queue.waitIdle();
 }
 
 CachedSurface::CachedSurface(RasterizerCacheVulkan& owner,
