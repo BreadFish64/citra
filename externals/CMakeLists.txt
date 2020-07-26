@@ -10,6 +10,7 @@ include(DownloadExternals)
 include(ExternalProject)
 
 # Boost
+if (NOT USE_SYSTEM_BOOST)
 set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/externals/boost")
 set(Boost_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/externals/boost")
 set(Boost_NO_SYSTEM_PATHS ON)
@@ -22,6 +23,7 @@ add_library(boost_serialization STATIC ${boost_serialization_SRC})
 target_link_libraries(boost_serialization PUBLIC boost)
 
 # Add additional boost libs here; remember to ALIAS them in the root CMakeLists!
+endif()
 
 # Catch
 add_library(catch-single-include INTERFACE)

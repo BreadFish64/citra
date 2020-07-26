@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Windows.h>
+
 namespace vk {
 class DispatchLoaderDynamic;
 }
@@ -13,9 +15,40 @@ inline vk::DispatchLoaderDynamic& GetDefaultDispatcher();
 #define VULKAN_HPP_DEFAULT_DISPATCHER ::Vulkan::GetDefaultDispatcher()
 #include <vulkan/vulkan.hpp>
 
+#include "video_core/renderer_opengl/gl_resource_manager.h"
+
 #include "common/logging/log.h"
 
 inline vk::DynamicLoader dl;
+
+class Win32SmartHandle : private NonCopyable {
+    HANDLE handle = NULL;
+
+public:
+    Win32SmartHandle() = default;
+    Win32SmartHandle(HANDLE&& handle) : handle{handle} {}
+
+    ~Win32SmartHandle() {
+        Release();
+    }
+
+    void operator=(HANDLE&& handle) {
+        Release();
+        this->handle = handle;
+    }
+
+    operator HANDLE() {
+        return handle;
+    }
+
+    /// Deletes the internal OpenGL resource
+    void Release() {
+        if (handle > NULL) {
+            CloseHandle(handle);
+            handle = NULL;
+        }
+    }
+};
 
 static VKAPI_ATTR vk::Bool32 VKAPI_CALL
 VulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -46,6 +79,44 @@ vk::DispatchLoaderDynamic& GetDefaultDispatcher() {
     return loader;
 }
 
+struct SharedSemaphore {
+    vk::UniqueSemaphore vk_handle{};
+    GLuint gl_handle{NULL};
+
+    SharedSemaphore& operator=(SharedSemaphore&& rhs) {
+        vk_handle = std::move(rhs.vk_handle);
+        gl_handle = std::move(rhs.gl_handle);
+        rhs.gl_handle = NULL;
+        return *this;
+    };
+    SharedSemaphore() = default;
+    SharedSemaphore(SharedSemaphore&& rhs){
+        *this = std::move(rhs);
+    }
+    SharedSemaphore(vk::Device device) {
+        {
+            vk::ExportSemaphoreCreateInfo export_info;
+            export_info.handleTypes = vk::ExternalSemaphoreHandleTypeFlagBits::eOpaqueWin32Kmt;
+            vk::SemaphoreCreateInfo semaphore_create_info;
+            semaphore_create_info.pNext = &export_info;
+            vk_handle = device.createSemaphoreUnique(semaphore_create_info);
+        }
+        vk::SemaphoreGetWin32HandleInfoKHR semaphore_win_info;
+        semaphore_win_info.semaphore = *vk_handle;
+        semaphore_win_info.handleType = vk::ExternalSemaphoreHandleTypeFlagBits::eOpaqueWin32Kmt;
+        HANDLE win_handle = device.getSemaphoreWin32HandleKHR(semaphore_win_info);
+        glGenSemaphoresEXT(1, &gl_handle);
+        glImportSemaphoreWin32HandleEXT(gl_handle, GL_HANDLE_TYPE_OPAQUE_WIN32_KMT_EXT, win_handle);
+    }
+
+    ~SharedSemaphore() {
+        if (gl_handle) {
+            LOG_CRITICAL(Render_Vulkan, "meep");
+            glDeleteSemaphoresEXT(1, &gl_handle);
+        }
+    }
+};
+
 struct Instance {
     static constexpr std::array<const char*, 1> validation_layers{"VK_LAYER_KHRONOS_validation"};
     static constexpr std::array<const char*, 2> instance_extensions{
@@ -64,6 +135,8 @@ struct Instance {
 
     f32 queue_priority = 1.0;
 
+    bool enable_validation = true;
+
     Instance(std::string_view app_name = "Citra") {
         {
             PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
@@ -77,8 +150,10 @@ struct Instance {
             info.setPApplicationName(app_name.data());
             vk::InstanceCreateInfo create_info;
             create_info.setPApplicationInfo(&info);
-            create_info.setEnabledLayerCount(validation_layers.size());
-            create_info.setPpEnabledLayerNames(validation_layers.data());
+            if (enable_validation) {
+                create_info.setEnabledLayerCount(validation_layers.size());
+                create_info.setPpEnabledLayerNames(validation_layers.data());
+            }
             create_info.setEnabledExtensionCount(instance_extensions.size());
             create_info.setPpEnabledExtensionNames(instance_extensions.data());
 
@@ -86,7 +161,7 @@ struct Instance {
             VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance);
         }
         // Setup debug callback
-        {
+        if (enable_validation) {
             vk::DebugUtilsMessengerCreateInfoEXT messenger_info;
             messenger_info.setPfnUserCallback(VulkanDebugCallback);
             constexpr auto severity_flags{vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |

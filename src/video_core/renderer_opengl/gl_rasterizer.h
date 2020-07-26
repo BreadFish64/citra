@@ -245,6 +245,9 @@ private:
     /// Internal implementation for AccelerateDrawBatch
     bool AccelerateDrawBatchInternal(bool is_indexed);
 
+    void CrossSubmit(Vulkan::CacheRecord& command_buffer);
+    void SemaphoreWaitFunc();
+
     struct VertexArrayInfo {
         u32 vs_input_index_min;
         u32 vs_input_index_max;
@@ -263,6 +266,24 @@ private:
 
     /// Setup geometry shader for AccelerateDrawBatch
     bool SetupGeometryShader();
+
+    struct ResourceWait {
+        Vulkan::SharedSemaphore vk_sync;
+        Vulkan::SharedSemaphore gl_wait;
+        GLsync fence{NULL};
+        ResourceWait() = default;
+        ResourceWait(ResourceWait&&) = default;
+        ResourceWait(vk::Device device)
+            : vk_sync{device}, gl_wait{device} {
+        }
+        ResourceWait& operator=(ResourceWait&&) = default;
+    };
+    Common::SPSCQueue<ResourceWait>
+        semaphore_wait_queue;
+    Common::SPSCQueue<ResourceWait>
+        semaphore_free_queue;
+    std::thread semaphore_waiter;
+    std::unique_ptr<Frontend::GraphicsContext> semaphore_wait_context;
 
     bool is_amd;
 

@@ -46,16 +46,17 @@ ConvertaTron5000::ConvertaTron5000(Instance& vk_inst) : vk_inst{vk_inst} {
 
     {
         std::array<vk::DescriptorPoolSize, 2> pool_sizes;
-        pool_sizes[0].descriptorCount = 2;
+        pool_sizes[0].descriptorCount = 200;
         pool_sizes[0].type = vk::DescriptorType::eStorageBuffer;
-        pool_sizes[1].descriptorCount = 1;
+        pool_sizes[1].descriptorCount = 100;
         pool_sizes[1].type = vk::DescriptorType::eStorageImage;
 
         vk::DescriptorPoolCreateInfo descriptor_pool_info;
         descriptor_pool_info.pPoolSizes = pool_sizes.data();
         descriptor_pool_info.poolSizeCount = 2;
-        descriptor_pool_info.maxSets = 2;
+        descriptor_pool_info.maxSets = 150;
         descriptor_pool_info.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        descriptor_pool_info.flags |= vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind;
         descriptor_pool = vk_inst.device->createDescriptorPoolUnique(descriptor_pool_info);
     }
     {
@@ -87,17 +88,6 @@ ConvertaTron5000::ConvertaTron5000(Instance& vk_inst) : vk_inst{vk_inst} {
         dst_buffer_descriptor.descriptorType = vk::DescriptorType::eStorageBuffer;
         buffer_to_buffer_set_layout =
             vk_inst.device->createDescriptorSetLayoutUnique(descriptor_layout_info);
-    }
-    {
-        std::array<vk::DescriptorSetLayout, 2> layouts{*buffer_to_image_set_layout,
-                                                       *buffer_to_buffer_set_layout};
-        vk::DescriptorSetAllocateInfo descriptor_set_allocate_info;
-        descriptor_set_allocate_info.descriptorPool = *descriptor_pool;
-        descriptor_set_allocate_info.descriptorSetCount = layouts.size();
-        descriptor_set_allocate_info.pSetLayouts = layouts.data();
-        auto sets = vk_inst.device->allocateDescriptorSetsUnique(descriptor_set_allocate_info);
-        buffer_to_image_descriptor_set = std::move(sets[0]);
-        buffer_to_buffer_descriptor_set = std::move(sets[1]);
     }
     {
         vk::PushConstantRange push_constant_range;
@@ -157,14 +147,6 @@ ConvertaTron5000::ConvertaTron5000(Instance& vk_inst) : vk_inst{vk_inst} {
                                                              sizeof(ImageToBuffer::d16_to_d16),
                                                              *buffer_to_buffer_pipeline_layout));
     {
-        vk::CommandBufferAllocateInfo command_buffer_allocate_info;
-        command_buffer_allocate_info.commandBufferCount = 1;
-        command_buffer_allocate_info.commandPool = *vk_inst.command_pool;
-        command_buffer_allocate_info.level = vk::CommandBufferLevel::ePrimary;
-        command_buffer = std::move(
-            vk_inst.device->allocateCommandBuffersUnique(command_buffer_allocate_info)[0]);
-    }
-    {
         vk::BufferCreateInfo temp_info;
         temp_info.sharingMode = vk::SharingMode::eExclusive;
         temp_info.usage = vk::BufferUsageFlagBits::eTransferSrc |
@@ -183,12 +165,21 @@ ConvertaTron5000::ConvertaTron5000(Instance& vk_inst) : vk_inst{vk_inst} {
         temp_buf_mem = vk_inst.device->allocateMemoryUnique(allocation_info);
         vk_inst.device->bindBufferMemory(*depth_stencil_temp, *temp_buf_mem, 0);
     }
+    {
+        vk::SamplerCreateInfo sampler_info;
+        sampler_info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        sampler_info.magFilter = vk::Filter::eNearest;
+        sampler_info.minFilter = vk::Filter::eNearest;
+        nearest_sampler = vk_inst.device->createSamplerUnique(sampler_info);
+    }
 }
 
 ConvertaTron5000::~ConvertaTron5000() {}
 
-void ConvertaTron5000::ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset,
-                                       const CachedSurface& surface) {
+void ConvertaTron5000::ImageFromBuffer(vk::CommandBuffer cmd_buff, vk::Buffer buffer,
+                                       vk::DeviceSize offset, const CachedSurface& surface) {
     switch (surface.pixel_format) {
     case PX::RGBA8:
     case PX::RGB8:
@@ -204,156 +195,140 @@ void ConvertaTron5000::ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset,
     case PX::I4:
     case PX::ETC1:
     case PX::ETC1A4: {
-        BufferColorConvert(Direction::BufferToImage, buffer, offset, surface);
+        BufferColorConvert(cmd_buff, Direction::BufferToImage, buffer, offset, surface);
     } break;
     case PX::D24S8:
     case PX::D24:
     case PX::D16: {
-        D24S8Convert(Direction::BufferToImage, buffer, offset, surface);
+        D24S8Convert(cmd_buff, Direction::BufferToImage, buffer, offset, surface);
     } break;
     default:
         UNREACHABLE();
     }
-    command_buffer->reset({});
 }
 
-void ConvertaTron5000::BufferFromImage(vk::Buffer buffer, vk::DeviceSize offset,
-                                       const CachedSurface& surface) {
+void ConvertaTron5000::BufferFromImage(vk::CommandBuffer cmd_buff, vk::Buffer buffer,
+                                       vk::DeviceSize offset, const CachedSurface& surface) {
     switch (surface.pixel_format) {
     case PX::RGBA8:
     case PX::RGB8:
     case PX::RGBA4:
     case PX::RGB5A1:
     case PX::RGB565: {
-        BufferColorConvert(Direction::ImageToBuffer, buffer, offset, surface);
+        BufferColorConvert(cmd_buff, Direction::ImageToBuffer, buffer, offset, surface);
     } break;
     case PX::D24S8:
     case PX::D24:
     case PX::D16: {
-        D24S8Convert(Direction::ImageToBuffer, buffer, offset, surface);
+        D24S8Convert(cmd_buff, Direction::ImageToBuffer, buffer, offset, surface);
     } break;
     default:
         UNREACHABLE();
     }
-    command_buffer->reset({});
 }
 
-void ConvertaTron5000::BufferColorConvert(Direction direction, vk::Buffer buffer,
-                                          vk::DeviceSize offset, const CachedSurface& surface) {
+void ConvertaTron5000::AssignConversionDescriptor(CachedSurface& surface, vk::Buffer buffer,
+                                                  vk::DeviceSize offset) {
+    vk::DescriptorSetAllocateInfo descriptor_set_allocate_info;
+    descriptor_set_allocate_info.descriptorPool = *descriptor_pool;
+    descriptor_set_allocate_info.descriptorSetCount = 1;
+    switch (surface.type) {
+    case SurfaceParams::SurfaceType::Color:
+    case SurfaceParams::SurfaceType::Texture:
+        descriptor_set_allocate_info.pSetLayouts = &*buffer_to_image_set_layout;
+        break;
+    case SurfaceParams::SurfaceType::Depth:
+    case SurfaceParams::SurfaceType::DepthStencil:
+        descriptor_set_allocate_info.pSetLayouts = &*buffer_to_buffer_set_layout;
+        break;
+    default:
+        UNREACHABLE();
+    }
+    surface.transfer_descriptor_set =
+        std::move(vk_inst.device->allocateDescriptorSetsUnique(descriptor_set_allocate_info)[0]);
+    std::array<vk::WriteDescriptorSet, 2> desc_set_writes;
+    vk::DescriptorBufferInfo buffer_info;
+    buffer_info.buffer = buffer;
+    buffer_info.offset = offset;
+    buffer_info.range = surface.size;
+
+    desc_set_writes[0].descriptorCount = 1;
+    desc_set_writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+    desc_set_writes[0].dstArrayElement = 0;
+    desc_set_writes[0].dstBinding = 0;
+    desc_set_writes[0].dstSet = *surface.transfer_descriptor_set;
+    desc_set_writes[0].pBufferInfo = &buffer_info;
+
+    vk::DescriptorImageInfo image_info;
+    vk::DescriptorBufferInfo temp_buffer_info;
+    switch (surface.type) {
+    case SurfaceParams::SurfaceType::Color:
+    case SurfaceParams::SurfaceType::Texture:
+        image_info.imageLayout = vk::ImageLayout::eGeneral;
+        image_info.imageView = *surface.uint_view;
+        image_info.sampler = *nearest_sampler;
+
+        desc_set_writes[1].descriptorCount = 1;
+        desc_set_writes[1].descriptorType = vk::DescriptorType::eStorageImage;
+        desc_set_writes[1].dstArrayElement = 0;
+        desc_set_writes[1].dstBinding = 1;
+        desc_set_writes[1].dstSet = *surface.transfer_descriptor_set;
+        desc_set_writes[1].pImageInfo = &image_info;
+        break;
+    case SurfaceParams::SurfaceType::Depth:
+    case SurfaceParams::SurfaceType::DepthStencil:
+        temp_buffer_info.buffer = *depth_stencil_temp;
+        temp_buffer_info.offset = 0;
+        temp_buffer_info.range = 1024 * 1024 * (4 + 1);
+
+        desc_set_writes[1].descriptorCount = 1;
+        desc_set_writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        desc_set_writes[1].dstArrayElement = 0;
+        desc_set_writes[1].dstBinding = 1;
+        desc_set_writes[1].dstSet = *surface.transfer_descriptor_set;
+        desc_set_writes[1].pBufferInfo = &temp_buffer_info;
+        break;
+    default:
+        UNREACHABLE();
+    }
+
+    vk_inst.device->updateDescriptorSets(desc_set_writes, {});
+}
+
+void ConvertaTron5000::BufferColorConvert(vk::CommandBuffer cmd_buff, Direction direction,
+                                          vk::Buffer buffer, vk::DeviceSize offset,
+                                          const CachedSurface& surface) {
     const auto& conversion_pipelines = direction == Direction::BufferToImage
                                            ? buffer_to_image_pipelines
                                            : image_to_buffer_pipelines;
-
-    vk::CommandBufferBeginInfo command_buffer_begin;
-    command_buffer_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-    command_buffer->begin(command_buffer_begin);
     vk::ImageSubresourceRange image_range;
     image_range.aspectMask = vk::ImageAspectFlagBits::eColor;
     image_range.baseMipLevel = 0;
     image_range.levelCount = 1;
     image_range.baseArrayLayer = 0;
     image_range.layerCount = 1;
-    vk::ImageMemoryBarrier barrier;
-    barrier.image = *surface.image;
-    barrier.subresourceRange = image_range;
-    barrier.oldLayout = vk::ImageLayout::eGeneral;
-    barrier.newLayout = vk::ImageLayout::eGeneral;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-    std::array<vk::WriteDescriptorSet, 2> desc_set_writes;
-
-    vk::SamplerCreateInfo sampler_info;
-    sampler_info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
-    sampler_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-    sampler_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
-    sampler_info.magFilter = vk::Filter::eNearest;
-    sampler_info.minFilter = vk::Filter::eNearest;
-    auto sampler = vk_inst.device->createSamplerUnique(sampler_info);
-    vk::ImageViewCreateInfo image_view_info;
-    image_view_info.viewType = vk::ImageViewType::e2D;
-    image_view_info.format = VulkanIntFormat(VulkanPixelFormat(surface.pixel_format));
-    image_view_info.image = *surface.image;
-    image_view_info.subresourceRange = image_range;
-    auto image_view = vk_inst.device->createImageViewUnique(image_view_info);
-    vk::DescriptorImageInfo image_info;
-    image_info.imageLayout = vk::ImageLayout::eGeneral;
-    image_info.imageView = *image_view;
-    image_info.sampler = *sampler;
-
-    desc_set_writes[0].descriptorCount = 1;
-    desc_set_writes[0].descriptorType = vk::DescriptorType::eStorageImage;
-    desc_set_writes[0].dstArrayElement = 0;
-    desc_set_writes[0].dstBinding = 1;
-    desc_set_writes[0].dstSet = *buffer_to_image_descriptor_set;
-    desc_set_writes[0].pImageInfo = &image_info;
-
-    vk::DescriptorBufferInfo buffer_info;
-    buffer_info.buffer = buffer;
-    buffer_info.offset = offset;
-    buffer_info.range = surface.size;
-
-    desc_set_writes[1].descriptorCount = 1;
-    desc_set_writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
-    desc_set_writes[1].dstArrayElement = 0;
-    desc_set_writes[1].dstBinding = 0;
-    desc_set_writes[1].dstSet = *buffer_to_image_descriptor_set;
-    desc_set_writes[1].pBufferInfo = &buffer_info;
-
-    vk_inst.device->updateDescriptorSets(desc_set_writes, {});
 
     const auto pipeline = *conversion_pipelines.at(surface.pixel_format);
-    command_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
-    command_buffer->pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                                    vk::PipelineStageFlagBits::eComputeShader, {}, {}, {}, barrier);
+    cmd_buff.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *buffer_to_image_pipeline_layout,
+                                0, *surface.transfer_descriptor_set, {});
+    cmd_buff.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
     struct {
         u8 pad[3]{};
         bool tiled{};
     } push_values{surface.is_tiled};
-    command_buffer->pushConstants(*buffer_to_image_pipeline_layout,
-                                  vk::ShaderStageFlagBits::eCompute, 0, sizeof(push_values),
-                                  &push_values);
-    command_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute,
-                                       *buffer_to_image_pipeline_layout, 0,
-                                       *buffer_to_image_descriptor_set, {});
+    cmd_buff.pushConstants(*buffer_to_image_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
+                           sizeof(push_values), &push_values);
     u8 div = (surface.pixel_format == PX::ETC1 || surface.pixel_format == PX::ETC1A4) ? 4 : 8;
-    command_buffer->dispatch(surface.width / div, surface.height / div, 1);
-    command_buffer->end();
-    vk_inst.SubmitCommandBuffers(*command_buffer);
-    vk_inst.queue.waitIdle();
+    cmd_buff.dispatch(surface.width / div, surface.height / div, 1);
 }
 
-void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset,
+void ConvertaTron5000::D24S8Convert(vk::CommandBuffer cmd_buff, Direction direction,
+                                    vk::Buffer buffer, vk::DeviceSize offset,
                                     const CachedSurface& surface) {
     const auto& conversion_pipelines = direction == Direction::BufferToImage
                                            ? buffer_to_image_pipelines
                                            : image_to_buffer_pipelines;
     const auto pipeline = *conversion_pipelines.at(surface.pixel_format);
-
-    std::array<vk::WriteDescriptorSet, 2> desc_set_writes;
-    vk::DescriptorBufferInfo main_buffer_info;
-    main_buffer_info.buffer = buffer;
-    main_buffer_info.offset = offset;
-    main_buffer_info.range = surface.size;
-
-    desc_set_writes[0].descriptorCount = 1;
-    desc_set_writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-    desc_set_writes[0].dstArrayElement = 0;
-    desc_set_writes[0].dstBinding = 0;
-    desc_set_writes[0].dstSet = *buffer_to_buffer_descriptor_set;
-    desc_set_writes[0].pBufferInfo = &main_buffer_info;
-
-    vk::DescriptorBufferInfo temp_buffer_info;
-    temp_buffer_info.buffer = *depth_stencil_temp;
-    temp_buffer_info.offset = 0;
-    temp_buffer_info.range = 1024 * 1024 * (4 + 1);
-
-    desc_set_writes[1].descriptorCount = 1;
-    desc_set_writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
-    desc_set_writes[1].dstArrayElement = 0;
-    desc_set_writes[1].dstBinding = 1;
-    desc_set_writes[1].dstSet = *buffer_to_buffer_descriptor_set;
-    desc_set_writes[1].pBufferInfo = &temp_buffer_info;
 
     vk::ImageSubresourceRange image_range;
     image_range.aspectMask = vk::ImageAspectFlagBits::eDepth;
@@ -377,27 +352,22 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-    vk_inst.device->updateDescriptorSets(desc_set_writes, {});
-
-    vk::CommandBufferBeginInfo command_buffer_begin;
-    command_buffer_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
     const auto Compute = [&] {
-        command_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
+        cmd_buff.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
         struct {
             u8 pad[3]{};
             bool tiled{};
         } push_values{surface.is_tiled};
-        command_buffer->pushConstants(*buffer_to_buffer_pipeline_layout,
-                                      vk::ShaderStageFlagBits::eCompute, 0, sizeof(push_values),
-                                      &push_values);
-        command_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute,
-                                           *buffer_to_buffer_pipeline_layout, 0,
-                                           *buffer_to_buffer_descriptor_set, {});
-        command_buffer->dispatch(surface.width / 8, surface.height / 8, 1);
+        cmd_buff.pushConstants(*buffer_to_buffer_pipeline_layout, vk::ShaderStageFlagBits::eCompute,
+                               0, sizeof(push_values), &push_values);
+        cmd_buff.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
+                                    *buffer_to_buffer_pipeline_layout, 0,
+                                    *surface.transfer_descriptor_set, {});
+        cmd_buff.dispatch(surface.width / 8, surface.height / 8, 1);
     };
     const auto Copy = [&] {
-        command_buffer->pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                                        vk::PipelineStageFlagBits::eTransfer, {}, {}, {}, barrier);
+        cmd_buff.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+                                 vk::PipelineStageFlagBits::eTransfer, {}, {}, {}, barrier);
         std::array<vk::BufferImageCopy, 2> copy;
         auto& depth_copy = copy[0];
         depth_copy.imageExtent = vk::Extent3D{surface.width, surface.height, 1};
@@ -411,23 +381,21 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
         stencil_copy.imageExtent = depth_copy.imageExtent;
         stencil_copy.bufferOffset = 1024 * 1024 * 4;
         if (direction == Direction::BufferToImage) {
-            command_buffer->copyBufferToImage(
+            cmd_buff.copyBufferToImage(
                 *depth_stencil_temp, *surface.image, vk::ImageLayout::eTransferDstOptimal,
                 {surface.type == SurfaceParams::SurfaceType::DepthStencil ? 2u : 1u, copy.data()});
             barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
         } else {
-            command_buffer->copyImageToBuffer(
+            cmd_buff.copyImageToBuffer(
                 *surface.image, vk::ImageLayout::eTransferSrcOptimal, *depth_stencil_temp,
                 {surface.type == SurfaceParams::SurfaceType::DepthStencil ? 2u : 1u, copy.data()});
             barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
         }
         barrier.newLayout = vk::ImageLayout::eGeneral;
 
-        command_buffer->pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                        vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {},
-                                        barrier);
+        cmd_buff.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                 vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {}, barrier);
     };
-    command_buffer->begin(command_buffer_begin);
     if (direction == Direction::BufferToImage) {
         Compute();
     }
@@ -435,8 +403,5 @@ void ConvertaTron5000::D24S8Convert(Direction direction, vk::Buffer buffer, vk::
     if (direction == Direction::ImageToBuffer) {
         Compute();
     }
-    command_buffer->end();
-    vk_inst.SubmitCommandBuffers(*command_buffer);
-    vk_inst.queue.waitIdle();
 }
 } // namespace Vulkan

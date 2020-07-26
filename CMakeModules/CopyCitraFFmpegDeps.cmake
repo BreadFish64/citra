@@ -1,6 +1,6 @@
 function(copy_citra_FFmpeg_deps target_dir)
     include(WindowsCopyFiles)
-    set(DLL_DEST "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/")
+    set(DLL_DEST "${CMAKE_BINARY_DIR}/bin/")
     windows_copy_files(${target_dir} ${FFMPEG_DIR}/bin ${DLL_DEST}
         avcodec*.dll
         avformat*.dll

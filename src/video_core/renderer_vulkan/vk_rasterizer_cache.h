@@ -4,9 +4,10 @@
 #include <optional>
 #include <variant>
 
-#include <boost/icl/interval_map.hpp>
-#include <boost/container/small_vector.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/container/small_vector.hpp>
+#include <boost/icl/interval_map.hpp>
+
 
 #include "video_core/renderer_vulkan/vk_instance.h"
 
@@ -25,45 +26,17 @@ struct inplace_replace : identity_based_inplace_combine<Type> {
     }
 };
 
-
 template <>
 inline std::string unary_template_to_string<inplace_replace>::apply() {
     return "=";
 }
-} // namespace ::boost::icl
+} // namespace boost::icl
 
 namespace Vulkan {
 
 enum WriteSource {
     CPU,
     GPU,
-};
-
-class Win32SmartHandle : private NonCopyable {
-    HANDLE handle = 0;
-
-public:
-    Win32SmartHandle() = default;
-    Win32SmartHandle(HANDLE&& handle) : handle{handle} {}
-
-    ~Win32SmartHandle() {
-        Release();
-    }
-
-    void operator=(HANDLE&& handle) {
-        Release();
-        this->handle = handle;
-    }
-
-    operator HANDLE() {
-        return handle;
-    }
-
-    /// Deletes the internal OpenGL resource
-    void Release() {
-        if (handle > 0)
-            CloseHandle(handle);
-    }
 };
 
 struct Instance;
@@ -103,12 +76,15 @@ struct CachedTextureCube {
 };
 
 struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface>, NonCopyable {
-    CachedSurface(RasterizerCacheVulkan& owner, const SurfaceParams& surface_params);
+    CachedSurface(RasterizerCacheVulkan& owner, vk::CommandBuffer cmd_buff,
+                  const SurfaceParams& surface_params);
     CachedSurface(RasterizerCacheVulkan& owner, const GPU::Regs::MemoryFillConfig& config);
     ~CachedSurface();
     RasterizerCacheVulkan& owner;
     friend class RasterizerCacheVulkan;
     vk::UniqueImage image;
+    vk::UniqueImageView uint_view;
+    vk::UniqueDescriptorSet transfer_descriptor_set;
     vk::UniqueDeviceMemory image_memory;
     Win32SmartHandle shmem_handle;
 
@@ -129,9 +105,11 @@ struct SurfaceComparator {
     }
 };
 
-//using SurfaceSet = boost::container::flat_set<Surface, SurfaceComparator, boost::container::small_vector<Surface, 1>>;
+// using SurfaceSet = boost::container::flat_set<Surface, SurfaceComparator,
+// boost::container::small_vector<Surface, 1>>;
 template <typename T, std::size_t size>
-using MiniSet = boost::container::flat_set<T, std::less<T>, boost::container::small_vector<T, size>>;
+using MiniSet =
+    boost::container::flat_set<T, std::less<T>, boost::container::small_vector<T, size>>;
 using SurfaceSet = MiniSet<Surface, 1>;
 
 // A gap means it is valid on both CPU and GPU, empty means it is valid on CPU, nullptr means that
@@ -147,9 +125,18 @@ using StorageMap =
     boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber, std::less,
                              boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
 
+struct CacheRecord {
+    vk::CommandBuffer command_buffer;
+    MiniSet<GLuint, 8> wait_tex;
+    MiniSet<GLuint, 8> signal_tex;
+};
+constexpr auto x = sizeof(CacheRecord);
+
 class RasterizerCacheVulkan : NonCopyable {
     std::tuple<Surface, StorageMap::iterator> SurfaceSearch(const SurfaceParams& params);
-    void FillSurface(const CachedSurface& surface, std::array<u8, 4> fill_buffer, Common::Rectangle<u32> rect);
+    void FillSurface(CacheRecord& record, const CachedSurface& surface,
+                     std::array<u8, 4> fill_buffer, Common::Rectangle<u32> rect);
+
 public:
     RasterizerCacheVulkan(Instance& vk_inst);
     ~RasterizerCacheVulkan();
@@ -166,39 +153,45 @@ public:
     std::unique_ptr<ConvertaTron5000> buffer_to_image;
 
     /// Blit one surface's texture to another
-    bool BlitSurfaces(const Surface& src_surface, const Common::Rectangle<u32>& src_rect,
-                      const Surface& dst_surface, const Common::Rectangle<u32>& dst_rect);
+    bool BlitSurfaces(CacheRecord& record, const Surface& src_surface,
+                      const Common::Rectangle<u32>& src_rect, const Surface& dst_surface,
+                      const Common::Rectangle<u32>& dst_rect);
 
     /// Copy one surface's region to another
-    void CopySurface(const Surface& src_surface, const Surface& dst_surface,
+    void CopySurface(CacheRecord& record, const Surface& src_surface, const Surface& dst_surface,
                      SurfaceInterval copy_interval);
 
     /// Load a texture from 3DS memory to OpenGL and cache it (if not already cached)
-    Surface GetSurface(const SurfaceParams& params, ScaleMatch match_res_scale,
+    Surface GetSurface(CacheRecord& record, const SurfaceParams& params, ScaleMatch match_res_scale,
                        bool load_if_create);
 
     /// Attempt to find a subrect (resolution scaled) of a surface, otherwise loads a texture from
     /// 3DS memory to OpenGL and caches it (if not already cached)
-    std::tuple<Surface, Common::Rectangle<u32>> GetSurfaceSubRect(const SurfaceParams& params,
+    std::tuple<Surface, Common::Rectangle<u32>> GetSurfaceSubRect(CacheRecord& record,
+                                                                  const SurfaceParams& params,
                                                                   ScaleMatch match_res_scale,
                                                                   bool load_if_create);
 
     /// Get a surface based on the texture configuration
-    Surface GetTextureSurface(const Pica::TexturingRegs::FullTextureConfig& config);
-    Surface GetTextureSurface(const Pica::Texture::TextureInfo& info, u32 max_level = 0);
+    Surface GetTextureSurface(CacheRecord& record,
+                              const Pica::TexturingRegs::FullTextureConfig& config);
+    Surface GetTextureSurface(CacheRecord& record, const Pica::Texture::TextureInfo& info,
+                              u32 max_level = 0);
 
     /// Get a texture cube based on the texture configuration
-    const CachedTextureCube& GetTextureCube(const TextureCubeConfig& config);
+    const CachedTextureCube& GetTextureCube(CacheRecord& record, const TextureCubeConfig& config);
 
     /// Get the color and depth surfaces based on the framebuffer configuration
     std::tuple<Surface, Surface, Common::Rectangle<u32>> GetFramebufferSurfaces(
-        bool using_color_fb, bool using_depth_fb, const Common::Rectangle<s32>& viewport_rect);
+        CacheRecord& record, bool using_color_fb, bool using_depth_fb,
+        const Common::Rectangle<s32>& viewport_rect);
 
     /// Get a surface that matches the fill config
     Surface GetFillSurface(const GPU::Regs::MemoryFillConfig& config);
 
     /// Get a surface that matches a "texture copy" display transfer config
-    std::tuple<Surface, Common::Rectangle<u32>> GetTexCopySurface(const SurfaceParams& params);
+    std::tuple<Surface, Common::Rectangle<u32>> GetTexCopySurface(CacheRecord& record,
+                                                                  const SurfaceParams& params);
 
     /// Write any cached resources overlapping the region back to memory (if dirty)
     void FlushRegion(PAddr addr, u32 size);
@@ -207,7 +200,7 @@ public:
     void InvalidateRegion(PAddr addr, u32 size, Surface region_owner);
 
     /// Mark region as being invalidated by region_owner (nullptr if 3DS memory)
-    void ValidateSurface(const CachedSurface& surface, bool is_new);
+    void ValidateSurface(CacheRecord& record, const CachedSurface& surface, bool is_new);
 
     /// Flush all cached resources tracked by this cache manager
     void FlushAll();

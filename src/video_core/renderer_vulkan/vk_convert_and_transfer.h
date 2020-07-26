@@ -17,9 +17,11 @@ public:
     ConvertaTron5000(Instance& vk_inst);
     ~ConvertaTron5000();
 
-    void ImageFromBuffer(vk::Buffer buffer, vk::DeviceSize offset, const CachedSurface& surface);
-    void BufferFromImage(vk::Buffer buffer, vk::DeviceSize offset,
+    void ImageFromBuffer(vk::CommandBuffer cmd_buff, vk::Buffer buffer, vk::DeviceSize offset,
                          const CachedSurface& surface);
+    void BufferFromImage(vk::CommandBuffer cmd_buff, vk::Buffer buffer, vk::DeviceSize offset,
+                         const CachedSurface& surface);
+    void AssignConversionDescriptor(CachedSurface& surface, vk::Buffer buffer, vk::DeviceSize offset);
 
 private:
     using PX = OpenGL::SurfaceParams::PixelFormat;
@@ -34,17 +36,17 @@ private:
     vk::UniqueDescriptorPool descriptor_pool;
     vk::UniqueDescriptorSetLayout buffer_to_image_set_layout;
     vk::UniqueDescriptorSetLayout buffer_to_buffer_set_layout;
-    vk::UniqueDescriptorSet buffer_to_image_descriptor_set;
-    vk::UniqueDescriptorSet buffer_to_buffer_descriptor_set;
     vk::UniquePipelineLayout buffer_to_image_pipeline_layout;
     vk::UniquePipelineLayout buffer_to_buffer_pipeline_layout;
-    vk::UniqueCommandBuffer command_buffer;
     vk::UniqueBuffer depth_stencil_temp;
     vk::UniqueDeviceMemory temp_buf_mem;
+    vk::UniqueSampler nearest_sampler;
 
     // eventually the command buffer should be started outside the function so this won't matter
-    void BufferColorConvert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset, const CachedSurface& surface);
-    void D24S8Convert(Direction direction, vk::Buffer buffer, vk::DeviceSize offset,
+    void BufferColorConvert(vk::CommandBuffer cmd_buff, Direction direction, vk::Buffer buffer,
+                            vk::DeviceSize offset, const CachedSurface& surface);
+    void D24S8Convert(vk::CommandBuffer cmd_buff, Direction direction, vk::Buffer buffer,
+                      vk::DeviceSize offset,
                       const CachedSurface& surface);
 };
 } // namespace Vulkan
