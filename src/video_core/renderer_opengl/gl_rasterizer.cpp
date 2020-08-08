@@ -51,12 +51,11 @@ static bool IsVendorIntel() {
 }
 
 RasterizerOpenGL::RasterizerOpenGL()
-    : is_amd(IsVendorAmd()), vertex_buffer(GL_ARRAY_BUFFER, VERTEX_BUFFER_SIZE, is_amd),
-      uniform_buffer(GL_UNIFORM_BUFFER, UNIFORM_BUFFER_SIZE, false),
-      index_buffer(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, false),
-      texture_buffer(GL_TEXTURE_BUFFER, TEXTURE_BUFFER_SIZE, false) {
-    semaphore_wait_context = VideoCore::g_renderer->GetRenderWindow().CreateSharedContext();
-    semaphore_waiter = std::thread{[this] { SemaphoreWaitFunc(); }};
+    : vk_inst{std::make_unique<Vulkan::Instance>()}, is_amd(IsVendorAmd()),
+      vertex_buffer(*vk_inst, vk::BufferUsageFlagBits::eVertexBuffer, VERTEX_BUFFER_SIZE),
+      uniform_buffer(*vk_inst, vk::BufferUsageFlagBits::eUniformBuffer, UNIFORM_BUFFER_SIZE),
+      index_buffer(*vk_inst, vk::BufferUsageFlagBits::eIndexBuffer, INDEX_BUFFER_SIZE),
+      texture_buffer(*vk_inst, vk::BufferUsageFlagBits::eStorageTexelBuffer, TEXTURE_BUFFER_SIZE) {
 
     allow_shadow = GLAD_GL_ARB_shader_image_load_store && GLAD_GL_ARB_shader_image_size &&
                    GLAD_GL_ARB_framebuffer_no_attachments;
@@ -175,20 +174,17 @@ RasterizerOpenGL::RasterizerOpenGL()
 #else
     shader_program_manager =
         std::make_unique<ShaderProgramManager>(GLAD_GL_ARB_separate_shader_objects, is_amd);
+    vk_shader_program_manager = std::make_unique<Vulkan::ShaderProgramManager>();
 #endif
 
     glEnable(GL_BLEND);
 
     SyncEntireState();
 
-    vk_inst = std::make_unique<Vulkan::Instance>();
     res_cache = std::make_unique<Vulkan::RasterizerCacheVulkan>(*vk_inst);
 }
 
-RasterizerOpenGL::~RasterizerOpenGL() {
-    semaphore_free_queue.Clear();
-    semaphore_wait_queue.Clear();
-};
+RasterizerOpenGL::~RasterizerOpenGL(){};
 
 void RasterizerOpenGL::LoadDiskResources(const std::atomic_bool& stop_loading,
                                          const VideoCore::DiskResourceLoadCallback& callback) {
@@ -504,68 +500,6 @@ bool RasterizerOpenGL::AccelerateDrawBatchInternal(bool is_indexed) {
     return true;
 }
 
-void RasterizerOpenGL::SemaphoreWaitFunc() {
-    Common::SetCurrentThreadName("Semaphore Release Thread");
-    semaphore_wait_context->MakeCurrent();
-
-    while (true) {
-        auto wait = semaphore_wait_queue.PopWait();
-
-        std::string_view status;
-        switch (glClientWaitSync(wait.fence, 0, GL_TIMEOUT_IGNORED)) {
-        case GL_ALREADY_SIGNALED:
-            status = "Already Signaled";
-            break;
-        case GL_TIMEOUT_EXPIRED:
-            status = "Timout Expired";
-            break;
-        case GL_CONDITION_SATISFIED:
-            status = "Condition Satistfied";
-            break;
-        case GL_WAIT_FAILED:
-            status = "Wait Failed";
-            break;
-        default:
-            UNREACHABLE();
-        }
-        LOG_INFO(Render_Vulkan, "Fence {:#016X} {}", reinterpret_cast<u64>(wait.fence), status);
-        glDeleteSync(wait.fence);
-        semaphore_free_queue.Push(std::move(wait));
-    }
-}
-
-void RasterizerOpenGL::CrossSubmit(Vulkan::CacheRecord& record) {
-    std::vector<GLenum> layouts(std::max(record.wait_tex.size(), record.signal_tex.size()),
-                                GL_LAYOUT_GENERAL_EXT);
-
-    ResourceWait semaphores;
-    if (!semaphore_free_queue.Pop(semaphores)) {
-        semaphores = ResourceWait{*vk_inst->device};
-    }
-    glSignalSemaphoreEXT(semaphores.vk_sync.gl_handle, 0, nullptr, record.wait_tex.size(),
-                         record.wait_tex.get_sequence_ref().data(), layouts.data());
-    {
-        vk::SubmitInfo submission;
-        submission.commandBufferCount = 1;
-        submission.pCommandBuffers = &record.command_buffer;
-
-        submission.waitSemaphoreCount = 1;
-        submission.pWaitSemaphores = &*semaphores.vk_sync.vk_handle;
-        vk::PipelineStageFlags wait_mask{vk::PipelineStageFlagBits::eAllCommands};
-        submission.pWaitDstStageMask = &wait_mask;
-
-        submission.signalSemaphoreCount = 1;
-        submission.pSignalSemaphores = &*semaphores.gl_wait.vk_handle;
-        vk_inst->queue.submit(submission, nullptr);
-    }
-    glWaitSemaphoreEXT(semaphores.gl_wait.gl_handle, 0, nullptr, record.signal_tex.size(),
-                       record.signal_tex.get_sequence_ref().data(), layouts.data());
-    semaphores.fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, {});
-    LOG_INFO(Render_Vulkan, "Fence {:#016X} Constructed", reinterpret_cast<u64>(semaphores.fence));
-    semaphore_wait_queue.Push(std::move(semaphores));
-    vk_inst->queue.waitIdle();
-}
-
 void RasterizerOpenGL::DrawTriangles() {
     if (vertex_batch.empty())
         return;
@@ -610,17 +544,22 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
         regs.rasterizer.viewport_corner.y // bottom
     };
 
-    vk::UniqueCommandBuffer vk_command_buffer;
-    {
+    thread_local vk::UniqueCommandBuffer vk_command_buffer = [this] {
         vk::CommandBufferAllocateInfo cmd_buff_info;
         cmd_buff_info.commandBufferCount = 1;
         cmd_buff_info.commandPool = *vk_inst->command_pool;
         cmd_buff_info.level = vk::CommandBufferLevel::ePrimary;
-        vk_command_buffer =
-            std::move(vk_inst->device->allocateCommandBuffersUnique(cmd_buff_info)[0]);
-    }
+        return std::move(vk_inst->device->allocateCommandBuffersUnique(cmd_buff_info)[0]);
+    }();
     Vulkan::CacheRecord record;
     record.command_buffer = *vk_command_buffer;
+    thread_local vk::UniqueFence cmd_fence;
+    if (cmd_fence) {
+        vk_inst->device->waitForFences(*cmd_fence, true, std::numeric_limits<u64>::max());
+    } else {
+        cmd_fence = vk_inst->device->createFenceUnique({});
+    }
+    vk_inst->device->resetFences(*cmd_fence);
     {
         vk::CommandBufferBeginInfo cmd_begin;
         cmd_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -776,7 +715,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
     }
     vk_command_buffer->end();
 
-    CrossSubmit(record);
+    vk_inst->CrossSubmit(record, *cmd_fence);
 
     // OGLTexture temp_tex;
     // if (need_duplicate_texture) {
@@ -1537,17 +1476,22 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
     dst_params.pixel_format = SurfaceParams::PixelFormatFromGPUPixelFormat(config.output_format);
     dst_params.UpdateParams();
 
-    vk::UniqueCommandBuffer vk_command_buffer;
-    {
+    thread_local vk::UniqueCommandBuffer vk_command_buffer = [this] {
         vk::CommandBufferAllocateInfo cmd_buff_info;
         cmd_buff_info.commandBufferCount = 1;
         cmd_buff_info.commandPool = *vk_inst->command_pool;
         cmd_buff_info.level = vk::CommandBufferLevel::ePrimary;
-        vk_command_buffer =
-            std::move(vk_inst->device->allocateCommandBuffersUnique(cmd_buff_info)[0]);
-    }
+        return std::move(vk_inst->device->allocateCommandBuffersUnique(cmd_buff_info)[0]);
+    }();
     Vulkan::CacheRecord record;
     record.command_buffer = *vk_command_buffer;
+    thread_local vk::UniqueFence cmd_fence;
+    if (cmd_fence) {
+        vk_inst->device->waitForFences(*cmd_fence, true, std::numeric_limits<u64>::max());
+    } else {
+        cmd_fence = vk_inst->device->createFenceUnique({});
+    }
+    vk_inst->device->resetFences(*cmd_fence);
     {
         vk::CommandBufferBeginInfo cmd_begin;
         cmd_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -1580,7 +1524,7 @@ bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransfe
         return false;
     vk_command_buffer->end();
 
-    CrossSubmit(record);
+    vk_inst->CrossSubmit(record, *cmd_fence);
 
     res_cache->InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
     return true;
@@ -1626,17 +1570,22 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     src_params.size = ((src_params.height - 1) * src_params.stride) + src_params.width;
     src_params.end = src_params.addr + src_params.size;
 
-    vk::UniqueCommandBuffer vk_command_buffer;
-    {
+    vk::UniqueCommandBuffer vk_command_buffer = [this] {
         vk::CommandBufferAllocateInfo cmd_buff_info;
         cmd_buff_info.commandBufferCount = 1;
         cmd_buff_info.commandPool = *vk_inst->command_pool;
         cmd_buff_info.level = vk::CommandBufferLevel::ePrimary;
-        vk_command_buffer =
-            std::move(vk_inst->device->allocateCommandBuffersUnique(cmd_buff_info)[0]);
-    }
+        return std::move(vk_inst->device->allocateCommandBuffersUnique(cmd_buff_info)[0]);
+    }();
     Vulkan::CacheRecord record;
     record.command_buffer = *vk_command_buffer;
+    thread_local vk::UniqueFence cmd_fence;
+    if (cmd_fence) {
+        vk_inst->device->waitForFences(*cmd_fence, true, std::numeric_limits<u64>::max());
+    } else {
+        cmd_fence = vk_inst->device->createFenceUnique({});
+    }
+    vk_inst->device->resetFences(*cmd_fence);
     {
         vk::CommandBufferBeginInfo cmd_begin;
         cmd_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -1685,7 +1634,7 @@ bool RasterizerOpenGL::AccelerateTextureCopy(const GPU::Regs::DisplayTransferCon
     }
     vk_command_buffer->end();
 
-    CrossSubmit(record);
+    vk_inst->CrossSubmit(record, *cmd_fence);
 
     res_cache->InvalidateRegion(dst_params.addr, dst_params.size, dst_surface);
     return true;
@@ -1724,6 +1673,13 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         cmd_buff_info.level = vk::CommandBufferLevel::ePrimary;
         return std::move(vk_inst->device->allocateCommandBuffersUnique(cmd_buff_info)[0]);
     }();
+    thread_local vk::UniqueFence cmd_fence;
+    if (cmd_fence) {
+        vk_inst->device->waitForFences(*cmd_fence, true, std::numeric_limits<u64>::max());
+    } else {
+        cmd_fence = vk_inst->device->createFenceUnique({});
+    }
+    vk_inst->device->resetFences(*cmd_fence);
     {
         vk::CommandBufferBeginInfo cmd_begin;
         cmd_begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -1737,7 +1693,7 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         res_cache->GetSurfaceSubRect(record, src_params, Vulkan::ScaleMatch::Ignore, true);
     vk_command_buffer->end();
 
-    CrossSubmit(record);
+    vk_inst->CrossSubmit(record, *cmd_fence);
     if (src_surface == nullptr) {
         return false;
     }
@@ -1750,7 +1706,7 @@ bool RasterizerOpenGL::AccelerateDisplay(const GPU::Regs::FramebufferConfig& con
         (float)src_rect.top / (float)scaled_height, (float)src_rect.right / (float)scaled_width);
 
     screen_info.display_texture = src_surface->texture.handle;
-
+    screen_info.keep_alive = src_surface;
     return true;
 }
 

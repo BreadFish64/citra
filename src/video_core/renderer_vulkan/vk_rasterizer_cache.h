@@ -4,10 +4,7 @@
 #include <optional>
 #include <variant>
 
-#include <boost/container/flat_set.hpp>
-#include <boost/container/small_vector.hpp>
 #include <boost/icl/interval_map.hpp>
-
 
 #include "video_core/renderer_vulkan/vk_instance.h"
 
@@ -105,11 +102,6 @@ struct SurfaceComparator {
     }
 };
 
-// using SurfaceSet = boost::container::flat_set<Surface, SurfaceComparator,
-// boost::container::small_vector<Surface, 1>>;
-template <typename T, std::size_t size>
-using MiniSet =
-    boost::container::flat_set<T, std::less<T>, boost::container::small_vector<T, size>>;
 using SurfaceSet = MiniSet<Surface, 1>;
 
 // A gap means it is valid on both CPU and GPU, empty means it is valid on CPU, nullptr means that
@@ -124,13 +116,6 @@ using ValidityMap =
 using StorageMap =
     boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber, std::less,
                              boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
-
-struct CacheRecord {
-    vk::CommandBuffer command_buffer;
-    MiniSet<GLuint, 8> wait_tex;
-    MiniSet<GLuint, 8> signal_tex;
-};
-constexpr auto x = sizeof(CacheRecord);
 
 class RasterizerCacheVulkan : NonCopyable {
     std::tuple<Surface, StorageMap::iterator> SurfaceSearch(const SurfaceParams& params);

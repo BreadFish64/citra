@@ -8,17 +8,23 @@
 #include <glad/glad.h>
 #include "common/common_types.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
+#include "video_core/renderer_vulkan/vk_instance.h"
 
 namespace OpenGL {
 
 class OGLStreamBuffer : private NonCopyable {
 public:
-    explicit OGLStreamBuffer(GLenum target, GLsizeiptr size, bool array_buffer_for_amd,
-                             bool prefer_coherent = false);
+    OGLStreamBuffer() = default;
+    OGLStreamBuffer(const OGLStreamBuffer&) = delete;
+    OGLStreamBuffer(OGLStreamBuffer&&) = default;
+    explicit OGLStreamBuffer(Vulkan::Instance& device, vk::BufferUsageFlags usage,
+                             vk::DeviceSize size, bool prefer_coherent = false);
     ~OGLStreamBuffer();
+    OGLStreamBuffer& operator=(const OGLStreamBuffer&) = delete;
+    OGLStreamBuffer& operator=(OGLStreamBuffer&&) = default;
 
     GLuint GetHandle() const;
-    GLsizeiptr GetSize() const;
+    vk::DeviceSize GetSize() const;
 
     /*
      * Allocates a linear chunk of memory in the GPU buffer with at least "size" bytes
@@ -28,22 +34,29 @@ public:
      * and the invalidation flag for previous chunks.
      * The actual used size must be specified on unmapping the chunk.
      */
-    std::tuple<u8*, GLintptr, bool> Map(GLsizeiptr size, GLintptr alignment = 0);
+    std::tuple<u8*, vk::DeviceSize, bool> Map(vk::DeviceSize size, vk::DeviceSize alignment = 0);
 
-    void Unmap(GLsizeiptr size);
+    void Unmap(vk::DeviceSize size);
 
 private:
     OGLBuffer gl_buffer;
-    GLenum gl_target;
+
+    vk::UniqueBuffer vk_buffer;
+    vk::UniqueDeviceMemory vk_memory;
+    Win32SmartHandle shmem_handle;
+    OGLMemoryObject gl_memory_object;
 
     bool coherent = false;
     bool persistent = false;
 
-    GLintptr buffer_pos = 0;
-    GLsizeiptr buffer_size = 0;
-    GLintptr mapped_offset = 0;
-    GLsizeiptr mapped_size = 0;
+    vk::DeviceSize buffer_pos = 0;
+    vk::DeviceSize buffer_size = 0;
+    vk::DeviceSize mapped_offset = 0;
+    vk::DeviceSize mapped_size = 0;
+    vk::DeviceSize flush_granularity = 0;
     u8* mapped_ptr = nullptr;
+
+    GLenum vkUsageToTarget(vk::BufferUsageFlags usage);
 };
 
 } // namespace OpenGL

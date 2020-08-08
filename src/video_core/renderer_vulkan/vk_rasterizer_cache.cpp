@@ -58,14 +58,16 @@ void RasterizerCacheVulkan::FillSurface(CacheRecord& record, const CachedSurface
         }
 
         record.command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                                   vk::PipelineStageFlagBits::eTransfer, {}, {}, {}, barrier);
-        record.command_buffer.clearColorImage(*surface.image, vk::ImageLayout::eTransferDstOptimal, color,
-                                   image_range);
+                                              vk::PipelineStageFlagBits::eTransfer, {}, {}, {},
+                                              barrier);
+        record.command_buffer.clearColorImage(*surface.image, vk::ImageLayout::eTransferDstOptimal,
+                                              color, image_range);
 
         barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
         barrier.newLayout = vk::ImageLayout::eGeneral;
         record.command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                   vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {}, barrier);
+                                              vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {},
+                                              barrier);
         record.signal_tex.emplace(surface.texture.handle);
     } break;
     default:
@@ -154,16 +156,16 @@ bool RasterizerCacheVulkan::BlitSurfaces(CacheRecord& record, const Surface& src
     blit_area.dstOffsets[1] = vk::Offset3D(dst_rect.right, dst_rect.top, 1);
 
     record.command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                               vk::PipelineStageFlagBits::eTransfer, {}, {}, {},
-                               {src_barrier, dst_barrier});
+                                          vk::PipelineStageFlagBits::eTransfer, {}, {}, {},
+                                          {src_barrier, dst_barrier});
     record.command_buffer.blitImage(*src_surface->image, vk::ImageLayout::eTransferSrcOptimal,
-                         *dst_surface->image, vk::ImageLayout::eTransferDstOptimal, {blit_area},
-                         vk::Filter::eNearest);
+                                    *dst_surface->image, vk::ImageLayout::eTransferDstOptimal,
+                                    {blit_area}, vk::Filter::eNearest);
     std::swap(src_barrier.oldLayout, src_barrier.newLayout);
     std::swap(dst_barrier.oldLayout, dst_barrier.newLayout);
     record.command_buffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                               vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {},
-                               {src_barrier, dst_barrier});
+                                          vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {},
+                                          {src_barrier, dst_barrier});
     record.wait_tex.emplace(src_surface->texture.handle);
     record.signal_tex.emplace(dst_surface->texture.handle);
     return true;
@@ -370,8 +372,7 @@ std::tuple<Surface, Surface, Common::Rectangle<u32>> RasterizerCacheVulkan::GetF
     return {color_surface, depth_surface, fb_rect};
 }
 
-Surface RasterizerCacheVulkan::GetFillSurface(
-                                              const GPU::Regs::MemoryFillConfig& config) {
+Surface RasterizerCacheVulkan::GetFillSurface(const GPU::Regs::MemoryFillConfig& config) {
     SurfaceParams params;
     params.addr = config.GetStartAddress();
     params.end = config.GetEndAddress();
@@ -452,6 +453,7 @@ void RasterizerCacheVulkan::FlushRegion(PAddr addr, u32 size) {
 
     if (!flush_surfaces.empty()) {
         vk::UniqueCommandBuffer cmd_buff;
+        CacheRecord cache_record;
         {
             vk::CommandBufferAllocateInfo cmd_buff_info;
             cmd_buff_info.commandBufferCount = 1;
@@ -466,12 +468,15 @@ void RasterizerCacheVulkan::FlushRegion(PAddr addr, u32 size) {
         }
         // TODO: make this more fine-grained
         for (auto flush_surface : flush_surfaces) {
+            cache_record.wait_tex.emplace_hint_unique(cache_record.wait_tex.end(),
+                                                      flush_surface->texture.handle);
             buffer_to_image->BufferFromImage(
                 *cmd_buff, *region.buffer, flush_surface->addr - region.guest_addr, *flush_surface);
         }
         cmd_buff->end();
         vk::UniqueFence flush_fence = vk_inst.device->createFenceUnique({});
-        vk_inst.SubmitCommandBuffers(*cmd_buff, *flush_fence);
+        cache_record.command_buffer = *cmd_buff;
+        vk_inst.CrossSubmit(cache_record, *flush_fence);
         vk_inst.device->waitForFences(*flush_fence, true, std::numeric_limits<u64>::max());
     }
 
@@ -605,7 +610,8 @@ RasterizerCacheVulkan::GetBufferOffset(PAddr addr) {
     }
 }
 
-CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, vk::CommandBuffer cmd_buff, const SurfaceParams& surface_params)
+CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, vk::CommandBuffer cmd_buff,
+                             const SurfaceParams& surface_params)
     : owner{owner} {
     static_cast<SurfaceParams&>(*this) = surface_params;
 
@@ -679,7 +685,7 @@ CachedSurface::CachedSurface(RasterizerCacheVulkan& owner, vk::CommandBuffer cmd
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
     cmd_buff.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-                                    vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {}, barrier);
+                             vk::PipelineStageFlagBits::eBottomOfPipe, {}, {}, {}, barrier);
 
     if (type <= SurfaceParams::SurfaceType::Texture) {
         vk::ImageViewCreateInfo image_view_info;

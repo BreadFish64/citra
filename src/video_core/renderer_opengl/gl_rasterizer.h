@@ -28,11 +28,15 @@
 #include "video_core/renderer_opengl/pica_to_gl.h"
 #include "video_core/shader/shader.h"
 
-#include "video_core/renderer_vulkan/vk_rasterizer_cache.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_rasterizer_cache.h"
 
 namespace Frontend {
 class EmuWindow;
+}
+
+namespace Vulkan {
+class ShaderProgramManager;
 }
 
 namespace OpenGL {
@@ -245,9 +249,6 @@ private:
     /// Internal implementation for AccelerateDrawBatch
     bool AccelerateDrawBatchInternal(bool is_indexed);
 
-    void CrossSubmit(Vulkan::CacheRecord& command_buffer);
-    void SemaphoreWaitFunc();
-
     struct VertexArrayInfo {
         u32 vs_input_index_min;
         u32 vs_input_index_max;
@@ -267,23 +268,8 @@ private:
     /// Setup geometry shader for AccelerateDrawBatch
     bool SetupGeometryShader();
 
-    struct ResourceWait {
-        Vulkan::SharedSemaphore vk_sync;
-        Vulkan::SharedSemaphore gl_wait;
-        GLsync fence{NULL};
-        ResourceWait() = default;
-        ResourceWait(ResourceWait&&) = default;
-        ResourceWait(vk::Device device)
-            : vk_sync{device}, gl_wait{device} {
-        }
-        ResourceWait& operator=(ResourceWait&&) = default;
-    };
-    Common::SPSCQueue<ResourceWait>
-        semaphore_wait_queue;
-    Common::SPSCQueue<ResourceWait>
-        semaphore_free_queue;
-    std::thread semaphore_waiter;
-    std::unique_ptr<Frontend::GraphicsContext> semaphore_wait_context;
+    std::unique_ptr<Vulkan::Instance> vk_inst;
+    std::unique_ptr<Vulkan::RasterizerCacheVulkan> res_cache;
 
     bool is_amd;
 
@@ -308,6 +294,7 @@ private:
     } uniform_block_data = {};
 
     std::unique_ptr<ShaderProgramManager> shader_program_manager;
+    std::unique_ptr<Vulkan::ShaderProgramManager> vk_shader_program_manager;
 
     // They shall be big enough for about one frame.
     static constexpr std::size_t VERTEX_BUFFER_SIZE = 16 * 1024 * 1024;
@@ -343,10 +330,6 @@ private:
     std::array<GLvec4, 256> proctex_diff_lut_data{};
 
     bool allow_shadow;
-
-
-    std::unique_ptr<Vulkan::Instance> vk_inst;
-    std::unique_ptr<Vulkan::RasterizerCacheVulkan> res_cache;
 };
 
 } // namespace OpenGL

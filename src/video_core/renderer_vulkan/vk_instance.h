@@ -15,9 +15,15 @@ inline vk::DispatchLoaderDynamic& GetDefaultDispatcher();
 #define VULKAN_HPP_DEFAULT_DISPATCHER ::Vulkan::GetDefaultDispatcher()
 #include <vulkan/vulkan.hpp>
 
-#include "video_core/renderer_opengl/gl_resource_manager.h"
+#include <boost/container/flat_set.hpp>
+#include <boost/container/small_vector.hpp>
 
 #include "common/logging/log.h"
+#include "common/thread.h"
+#include "core/frontend/emu_window.h"
+#include "video_core/renderer_base.h"
+#include "video_core/renderer_opengl/gl_resource_manager.h"
+#include "video_core/video_core.h"
 
 inline vk::DynamicLoader dl;
 
@@ -90,7 +96,7 @@ struct SharedSemaphore {
         return *this;
     };
     SharedSemaphore() = default;
-    SharedSemaphore(SharedSemaphore&& rhs){
+    SharedSemaphore(SharedSemaphore&& rhs) {
         *this = std::move(rhs);
     }
     SharedSemaphore(vk::Device device) {
@@ -111,10 +117,19 @@ struct SharedSemaphore {
 
     ~SharedSemaphore() {
         if (gl_handle) {
-            LOG_CRITICAL(Render_Vulkan, "meep");
             glDeleteSemaphoresEXT(1, &gl_handle);
         }
     }
+};
+
+template <typename T, std::size_t size>
+using MiniSet =
+    boost::container::flat_set<T, std::less<T>, boost::container::small_vector<T, size>>;
+
+struct CacheRecord {
+    vk::CommandBuffer command_buffer;
+    MiniSet<GLuint, 8> wait_tex;
+    MiniSet<GLuint, 8> signal_tex;
 };
 
 struct Instance {
@@ -135,7 +150,7 @@ struct Instance {
 
     f32 queue_priority = 1.0;
 
-    bool enable_validation = true;
+    bool enable_validation = false;
 
     Instance(std::string_view app_name = "Citra") {
         {
@@ -200,7 +215,7 @@ struct Instance {
                      vk::Format::eD16Unorm,
                      vk::Format::eD24UnormS8Uint,
                      vk::Format::eX8D24UnormPack32,
-                }) {
+                 }) {
                 auto format_properties = physical_device.getFormatProperties(format);
                 LOG_INFO(Render_Vulkan, "{} linear: {}, tiling: {}", vk::to_string(format),
                          vk::to_string(format_properties.linearTilingFeatures),
@@ -249,6 +264,13 @@ struct Instance {
             command_pool_info.queueFamilyIndex = queue_family_index;
             command_pool = device->createCommandPoolUnique(command_pool_info);
         }
+        semaphore_wait_context = VideoCore::g_renderer->GetRenderWindow().CreateSharedContext();
+        semaphore_waiter = std::thread{[this] { SemaphoreWaitFunc(); }};
+    }
+
+    ~Instance() {
+        semaphore_free_queue.Clear();
+        semaphore_wait_queue.Clear();
     }
 
     u32 getMemoryType(u32 type_filter, vk::MemoryPropertyFlags properties) {
@@ -263,12 +285,88 @@ struct Instance {
         throw std::runtime_error("failed to find suitable memory type!");
     }
 
-    void SubmitCommandBuffers(vk::ArrayProxy<vk::CommandBuffer> cmd_buffs,
-                              vk::Fence fence = nullptr) {
-        vk::SubmitInfo submit_info;
-        submit_info.pCommandBuffers = cmd_buffs.data();
-        submit_info.commandBufferCount = cmd_buffs.size();
-        queue.submit(submit_info, nullptr);
+    void SemaphoreWaitFunc() {
+        Common::SetCurrentThreadName("Semaphore Release Thread");
+        semaphore_wait_context->MakeCurrent();
+
+        while (true) {
+            auto wait = semaphore_wait_queue.PopWait();
+
+            std::string_view status;
+            switch (glClientWaitSync(wait.fence, 0, GL_TIMEOUT_IGNORED)) {
+            case GL_ALREADY_SIGNALED:
+                status = "Already Signaled";
+                break;
+            case GL_TIMEOUT_EXPIRED:
+                status = "Timout Expired";
+                break;
+            case GL_CONDITION_SATISFIED:
+                status = "Condition Satistfied";
+                break;
+            case GL_WAIT_FAILED:
+                status = "Wait Failed";
+                break;
+            default:
+                UNREACHABLE();
+            }
+            LOG_INFO(Render_Vulkan, "Fence {:#016X} {}", reinterpret_cast<u64>(wait.fence), status);
+            glDeleteSync(wait.fence);
+            semaphore_free_queue.Push(std::move(wait));
+        }
+    }
+
+    struct ResourceWait {
+        Vulkan::SharedSemaphore vk_sync;
+        Vulkan::SharedSemaphore gl_wait;
+        GLsync fence{NULL};
+        ResourceWait() = default;
+        ResourceWait(ResourceWait&&) = default;
+        ResourceWait(vk::Device device) : vk_sync{device}, gl_wait{device} {}
+        ResourceWait& operator=(ResourceWait&&) = default;
+    };
+    Common::SPSCQueue<ResourceWait> semaphore_wait_queue;
+    Common::SPSCQueue<ResourceWait> semaphore_free_queue;
+    std::thread semaphore_waiter;
+    std::unique_ptr<Frontend::GraphicsContext> semaphore_wait_context;
+
+    void CrossSubmit(Vulkan::CacheRecord& record, vk::Fence fence = nullptr) {
+        constexpr bool sync = false;
+        std::vector<GLenum> layouts;
+        if (sync)
+            layouts.resize(std::max(record.wait_tex.size(), record.signal_tex.size()),
+                           GL_LAYOUT_GENERAL_EXT);
+        ResourceWait semaphores;
+        if (sync) {
+            if (!semaphore_free_queue.Pop(semaphores)) {
+                semaphores = ResourceWait{*device};
+            }
+            glSignalSemaphoreEXT(semaphores.vk_sync.gl_handle, 0, nullptr, record.wait_tex.size(),
+                                 record.wait_tex.get_sequence_ref().data(), layouts.data());
+        }
+        {
+            vk::SubmitInfo submission;
+            submission.commandBufferCount = 1;
+            submission.pCommandBuffers = &record.command_buffer;
+
+            if (sync) {
+                submission.waitSemaphoreCount = 1;
+                submission.pWaitSemaphores = &*semaphores.vk_sync.vk_handle;
+                vk::PipelineStageFlags wait_mask{vk::PipelineStageFlagBits::eAllCommands};
+                submission.pWaitDstStageMask = &wait_mask;
+
+                submission.signalSemaphoreCount = 1;
+                submission.pSignalSemaphores = &*semaphores.gl_wait.vk_handle;
+            }
+            queue.submit(submission, fence);
+        }
+        if (sync) {
+            glWaitSemaphoreEXT(semaphores.gl_wait.gl_handle, 0, nullptr, record.signal_tex.size(),
+                               record.signal_tex.get_sequence_ref().data(), layouts.data());
+            semaphores.fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, {});
+            LOG_INFO(Render_Vulkan, "Fence {:#016X} Constructed",
+                     reinterpret_cast<u64>(semaphores.fence));
+            semaphore_wait_queue.Push(std::move(semaphores));
+        }
     }
 };
 

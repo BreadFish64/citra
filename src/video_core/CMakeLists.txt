@@ -78,6 +78,12 @@ add_library(video_core STATIC
     renderer_vulkan/conversion_shaders/image_to_buffer_conversions.h
     renderer_vulkan/conversion_shaders/utils.comp
     renderer_vulkan/conversion_shaders/etc_utils.comp
+    renderer_vulkan/vk_shader_manager.cpp
+    renderer_vulkan/vk_shader_manager.h
+    renderer_vulkan/vk_shader_decompiler.cpp
+    renderer_vulkan/vk_shader_decompiler.h
+    renderer_vulkan/vk_shader_gen.cpp
+    renderer_vulkan/vk_shader_gen.h
 
     shader/debug_data.h
     shader/shader.cpp
@@ -160,7 +166,7 @@ if (ARCHITECTURE_x86_64)
 endif()
 
 find_package(Vulkan REQUIRED)
-target_link_libraries(video_core PRIVATE Vulkan::Vulkan)
+target_link_libraries(video_core PRIVATE Vulkan::Vulkan shaderc)
 target_include_directories(video_core PRIVATE Vulkan::Vulkan)
 
 set(buffer_to_image_shaders
